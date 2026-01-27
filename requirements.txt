@@ -1,0 +1,16 @@
+# MonolithBot Dependencies
+
+# Discord API wrapper
+discord.py>=2.3.0
+
+# Async HTTP client for Jellyfin API
+aiohttp>=3.9.0
+
+# Task scheduling
+APScheduler>=3.10.0
+
+# Environment variable loading
+python-dotenv>=1.0.0
+
+# Timezone support
+pytz>=2024.1

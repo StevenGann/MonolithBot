@@ -1,0 +1,18 @@
+{
+  "discord": {
+    "token": "YOUR_DISCORD_BOT_TOKEN",
+    "announcement_channel_id": 123456789012345678,
+    "alert_channel_id": 123456789012345678
+  },
+  "jellyfin": {
+    "url": "http://localhost:8096",
+    "api_key": "YOUR_JELLYFIN_API_KEY"
+  },
+  "schedule": {
+    "announcement_times": ["17:00"],
+    "timezone": "America/Los_Angeles",
+    "health_check_interval_minutes": 5,
+    "lookback_hours": 24
+  },
+  "content_types": ["Movie", "Series", "Audio"]
+}
