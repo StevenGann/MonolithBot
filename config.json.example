@@ -12,7 +12,8 @@
     "announcement_times": ["17:00"],
     "timezone": "America/Los_Angeles",
     "health_check_interval_minutes": 5,
-    "lookback_hours": 24
+    "lookback_hours": 24,
+    "max_items_per_type": 10
   },
   "content_types": ["Movie", "Series", "Audio"]
 }

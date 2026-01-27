@@ -1,14 +1,50 @@
 """
-Health monitoring cog - Jellyfin server health checks.
+Health monitoring cog for Jellyfin server status.
 
-This cog handles:
-- Periodic health checks of the Jellyfin server
-- Notifications when the server goes down or comes back online
-- Tracking downtime duration
+This cog provides continuous monitoring of the Jellyfin server's availability,
+sending Discord notifications when the server goes offline or comes back online.
+
+Key Features:
+    - Periodic health checks at configurable intervals
+    - State-based notifications (only alerts on status changes)
+    - Downtime tracking and reporting
+    - Rich Discord embeds with server details
+
+State Machine:
+    The cog tracks server state to avoid notification spam:
+
+    ```
+    [Unknown] ──check──▶ [Online]  ◀──────────────────┐
+        │                   │                         │
+        │                   │ check fails             │ check succeeds
+        │                   ▼                         │
+        │              [Offline] ─────────────────────┘
+        │                   │
+        └───check fails────►│
+                            │
+                   (notification sent only on
+                    state transitions, not
+                    on every failed check)
+    ```
+
+Configuration:
+    Uses these settings from bot.config.schedule:
+        - health_check_interval_minutes: How often to check (default: 5)
+
+    And from bot.config.discord:
+        - alert_channel_id: Where to send status notifications
+
+Example Notifications:
+    - 🔴 "Jellyfin Server Offline" - When server becomes unreachable
+    - 🟢 "Jellyfin Server Online" - When server recovers (includes downtime)
+
+See Also:
+    - bot.services.jellyfin: The API client used for health checks
+    - bot.cogs.announcements: Companion cog for content announcements
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Optional
 
 import discord
@@ -26,31 +62,81 @@ from bot.services.scheduler import create_scheduler
 if TYPE_CHECKING:
     from bot.main import MonolithBot
 
+# Module logger
 logger = logging.getLogger("monolithbot.health")
 
 
 class HealthCog(commands.Cog, name="Health"):
-    """Cog for Jellyfin server health monitoring."""
+    """
+    Discord cog for monitoring Jellyfin server health.
 
-    def __init__(self, bot: "MonolithBot"):
+    This cog performs periodic health checks against the Jellyfin server
+    and sends notifications to a Discord channel when the server status
+    changes (online → offline or offline → online).
+
+    The cog maintains internal state to track:
+        - Current server status (online/offline/unknown)
+        - When the server was last seen online
+        - When the server went offline (for downtime calculation)
+        - Last known server info (name, version)
+
+    Attributes:
+        bot: Reference to the MonolithBot instance.
+        jellyfin: Jellyfin API client for health checks.
+        scheduler: APScheduler instance for periodic checks.
+
+    Example:
+        The cog is automatically loaded by the bot. To manually interact:
+
+        >>> # Cog is loaded automatically, but can be accessed via:
+        >>> health_cog = bot.get_cog("Health")
+    """
+
+    def __init__(self, bot: "MonolithBot") -> None:
+        """
+        Initialize the health monitoring cog.
+
+        Args:
+            bot: The MonolithBot instance. Used to access configuration
+                and Discord channels.
+        """
         self.bot = bot
         self.jellyfin: Optional[JellyfinClient] = None
         self.scheduler = create_scheduler(bot.config)
 
+        # State tracking for server status
+        # None = unknown (initial state before first check)
+        # True = server is online
+        # False = server is offline
         self._server_online: Optional[bool] = None
+
+        # Timestamp tracking for status reporting
         self._last_online: Optional[datetime] = None
         self._went_offline: Optional[datetime] = None
         self._last_server_info: Optional[ServerInfo] = None
 
+    # -------------------------------------------------------------------------
+    # Cog Lifecycle
+    # -------------------------------------------------------------------------
+
     async def cog_load(self) -> None:
-        """Called when the cog is loaded."""
+        """
+        Initialize resources when the cog is loaded.
+
+        Called automatically by discord.py when the cog is added to the bot.
+        Sets up the Jellyfin client, performs an initial health check to
+        establish baseline state, and starts the periodic health check scheduler.
+        """
+        # Initialize Jellyfin client
         self.jellyfin = JellyfinClient(
             base_url=self.bot.config.jellyfin.url,
             api_key=self.bot.config.jellyfin.api_key,
         )
 
+        # Establish initial state (don't notify on startup)
         await self._initial_health_check()
 
+        # Schedule periodic health checks
         interval_minutes = self.bot.config.schedule.health_check_interval_minutes
         self.scheduler.add_job(
             self._run_health_check,
@@ -65,14 +151,29 @@ class HealthCog(commands.Cog, name="Health"):
         )
 
     async def cog_unload(self) -> None:
-        """Called when the cog is unloaded."""
+        """
+        Clean up resources when the cog is unloaded.
+
+        Called automatically by discord.py when the cog is removed from the bot.
+        Stops the scheduler and closes the HTTP client session.
+        """
         self.scheduler.shutdown(wait=False)
         if self.jellyfin:
             await self.jellyfin.close()
         logger.info("Health monitoring cog unloaded")
 
+    # -------------------------------------------------------------------------
+    # Health Check Logic
+    # -------------------------------------------------------------------------
+
     async def _initial_health_check(self) -> None:
-        """Perform initial health check to establish baseline state."""
+        """
+        Perform initial health check to establish baseline server state.
+
+        This check runs once at startup to determine the initial state
+        without sending notifications. This prevents spurious "server online"
+        notifications every time the bot restarts.
+        """
         try:
             self._last_server_info = await self.jellyfin.check_health()
             self._server_online = True
@@ -88,7 +189,19 @@ class HealthCog(commands.Cog, name="Health"):
             logger.warning(f"Initial health check failed: {e}")
 
     async def _run_health_check(self) -> None:
-        """Execute a health check and handle state changes."""
+        """
+        Execute a scheduled health check and handle state changes.
+
+        This is the main health check method called by the scheduler.
+        It attempts to contact the Jellyfin server and delegates to
+        the appropriate handler based on success or failure.
+
+        State transitions trigger notifications:
+            - online → offline: Sends offline notification
+            - offline → online: Sends online notification with downtime
+            - online → online: No notification (silent success)
+            - offline → offline: No notification (still down)
+        """
         logger.debug("Running health check...")
 
         try:
@@ -97,22 +210,35 @@ class HealthCog(commands.Cog, name="Health"):
             await self._handle_server_online(server_info)
 
         except JellyfinConnectionError as e:
+            # Network-level failure (can't reach server)
             logger.warning(f"Health check failed - connection error: {e}")
             await self._handle_server_offline(str(e))
 
         except JellyfinError as e:
+            # Server reachable but returned an error
             logger.warning(f"Health check failed - API error: {e}")
             await self._handle_server_offline(str(e))
 
     async def _handle_server_online(self, server_info: ServerInfo) -> None:
-        """Handle server being online."""
+        """
+        Handle a successful health check (server is online).
+
+        Updates internal state and sends a notification if the server
+        was previously offline (recovery notification).
+
+        Args:
+            server_info: Server information from the health check.
+        """
         was_offline = self._server_online is False
 
+        # Update state
         self._server_online = True
         self._last_online = datetime.now(timezone.utc)
 
+        # Only notify if this is a recovery (was offline, now online)
         if was_offline:
-            downtime = None
+            # Calculate downtime if we know when it went offline
+            downtime: Optional[timedelta] = None
             if self._went_offline:
                 downtime = datetime.now(timezone.utc) - self._went_offline
                 self._went_offline = None
@@ -124,23 +250,48 @@ class HealthCog(commands.Cog, name="Health"):
             await self._send_online_notification(server_info, downtime)
 
     async def _handle_server_offline(self, error_message: str) -> None:
-        """Handle server being offline."""
+        """
+        Handle a failed health check (server is offline).
+
+        Updates internal state and sends a notification if this is
+        a new outage (was online or unknown, now offline).
+
+        Args:
+            error_message: Description of why the health check failed.
+        """
+        # Check if this is a new outage
+        # Notify if: was online (True) or was unknown (None, first check failed)
         was_online = self._server_online is True or self._server_online is None
 
         if was_online:
+            # Record when the outage started
             self._went_offline = datetime.now(timezone.utc)
             self._server_online = False
             logger.warning(f"Server went offline: {error_message}")
             await self._send_offline_notification(error_message)
         else:
+            # Server was already offline, no need to notify again
             logger.debug("Server still offline")
+
+    # -------------------------------------------------------------------------
+    # Discord Notifications
+    # -------------------------------------------------------------------------
 
     async def _send_online_notification(
         self,
         server_info: ServerInfo,
-        downtime: Optional[datetime] = None,
+        downtime: Optional[timedelta] = None,
     ) -> None:
-        """Send notification that server is back online."""
+        """
+        Send a Discord notification that the server is back online.
+
+        Creates a green embed with server details and downtime duration
+        (if available).
+
+        Args:
+            server_info: Information about the recovered server.
+            downtime: How long the server was offline (None if unknown).
+        """
         channel = self.bot.get_channel(self.bot.config.discord.alert_channel_id)
         if channel is None:
             logger.error("Alert channel not found")
@@ -163,9 +314,17 @@ class HealthCog(commands.Cog, name="Health"):
         embed.set_footer(text="Monolith Status")
 
         await channel.send(embed=embed)
+        logger.info("Sent server online notification")
 
     async def _send_offline_notification(self, error_message: str) -> None:
-        """Send notification that server is offline."""
+        """
+        Send a Discord notification that the server is offline.
+
+        Creates a red embed with error details and last known online time.
+
+        Args:
+            error_message: Description of the connection/API error.
+        """
         channel = self.bot.get_channel(self.bot.config.discord.alert_channel_id)
         if channel is None:
             logger.error("Alert channel not found")
@@ -178,6 +337,7 @@ class HealthCog(commands.Cog, name="Health"):
             timestamp=datetime.now(timezone.utc),
         )
 
+        # Show error in a code block (truncate if too long)
         embed.add_field(
             name="Error",
             value=f"```{error_message[:500]}```",
@@ -190,6 +350,7 @@ class HealthCog(commands.Cog, name="Health"):
             inline=False,
         )
 
+        # Show relative time since last successful check
         if self._last_online:
             embed.add_field(
                 name="Last Online",
@@ -200,18 +361,47 @@ class HealthCog(commands.Cog, name="Health"):
         embed.set_footer(text="Monolith Status")
 
         await channel.send(embed=embed)
+        logger.info("Sent server offline notification")
+
+    # -------------------------------------------------------------------------
+    # Utility Methods
+    # -------------------------------------------------------------------------
 
     def _format_duration(self, seconds: float) -> str:
-        """Format duration in seconds to human-readable string."""
+        """
+        Format a duration in seconds to a human-readable string.
+
+        Automatically selects the most appropriate unit(s) based on
+        the duration length.
+
+        Args:
+            seconds: Duration in seconds.
+
+        Returns:
+            Human-readable duration string.
+
+        Examples:
+            >>> self._format_duration(45)
+            '45 seconds'
+            >>> self._format_duration(90)
+            '1 minute'
+            >>> self._format_duration(3665)
+            '1h 1m'
+            >>> self._format_duration(90000)
+            '1d 1h'
+        """
         seconds = int(seconds)
 
+        # Less than a minute: show seconds
         if seconds < 60:
             return f"{seconds} second{'s' if seconds != 1 else ''}"
 
+        # Less than an hour: show minutes
         minutes = seconds // 60
         if minutes < 60:
             return f"{minutes} minute{'s' if minutes != 1 else ''}"
 
+        # Less than a day: show hours (and minutes if non-zero)
         hours = minutes // 60
         remaining_minutes = minutes % 60
         if hours < 24:
@@ -219,6 +409,7 @@ class HealthCog(commands.Cog, name="Health"):
                 return f"{hours}h {remaining_minutes}m"
             return f"{hours} hour{'s' if hours != 1 else ''}"
 
+        # Days: show days (and hours if non-zero)
         days = hours // 24
         remaining_hours = hours % 24
         if remaining_hours:
@@ -226,6 +417,16 @@ class HealthCog(commands.Cog, name="Health"):
         return f"{days} day{'s' if days != 1 else ''}"
 
 
+# =============================================================================
+# Cog Setup
+# =============================================================================
+
+
 async def setup(bot: "MonolithBot") -> None:
-    """Setup function for the cog."""
+    """
+    Setup function called by discord.py to load the cog.
+
+    Args:
+        bot: The MonolithBot instance to add the cog to.
+    """
     await bot.add_cog(HealthCog(bot))
