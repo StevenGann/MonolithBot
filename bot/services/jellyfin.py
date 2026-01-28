@@ -400,7 +400,7 @@ class JellyfinClient:
             >>> for movie in movies:
             ...     print(f"Added: {movie.display_title}")
         """
-        # Calculate cutoff timestamp in UTC
+        # Calculate cutoff timestamp in UTC for client-side filtering
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -418,7 +418,49 @@ class JellyfinClient:
         data = await self._request("GET", "/Items", params=params)
         items = data.get("Items", [])
 
-        return [self._parse_item(item) for item in items]
+        # Parse items and apply client-side date filtering
+        # This ensures we only return items within the lookback window,
+        # regardless of whether the API's MinDateCreated filter works correctly
+        #
+        # For items without date_created, we inherit from the previous item since
+        # Jellyfin returns items in chronological order. This handles cases where
+        # certain items don't have date_created available.
+        parsed_items = []
+        last_valid_date: datetime | None = None
+
+        for item in items:
+            parsed_item = self._parse_item(item)
+
+            # Determine the effective date for this item
+            if parsed_item.date_created is not None:
+                effective_date = parsed_item.date_created
+                last_valid_date = effective_date
+            elif last_valid_date is not None:
+                # Inherit date from previous item (Jellyfin returns chronologically)
+                effective_date = last_valid_date
+                logger.debug(
+                    f"Item '{parsed_item.name}' has no date_created, "
+                    f"inheriting {effective_date} from previous item"
+                )
+            else:
+                # No date and no previous item to inherit from - skip
+                logger.debug(
+                    f"Skipping item '{parsed_item.name}' - no date_created available "
+                    f"and no previous item to inherit from"
+                )
+                continue
+
+            # Apply cutoff filter using the effective date
+            if effective_date >= cutoff:
+                parsed_items.append(parsed_item)
+            else:
+                # Item is older than cutoff
+                logger.debug(
+                    f"Filtering out '{parsed_item.name}' - effective date "
+                    f"{effective_date} is older than cutoff {cutoff}"
+                )
+
+        return parsed_items
 
     async def get_all_recent_items(
         self,

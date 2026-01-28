@@ -8,12 +8,13 @@ A Discord bot for monitoring your Jellyfin media server. MonolithBot keeps your 
 - **🔔 Server Health Monitoring**: Get notified when Jellyfin goes down and when it comes back online
 - **🎨 Rich Embeds**: Beautiful Discord embeds with cover images and direct links to your content
 - **⚙️ Flexible Configuration**: Configure via JSON file (local) or environment variables (Docker)
+- **✅ Well Tested**: Comprehensive test suite with 160+ tests and CI/CD integration
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.10+
 - A Discord bot token ([Create one here](https://discord.com/developers/applications))
 - A Jellyfin server with an API key ([How to get one](https://jellyfin.org/docs/general/server/configuration/))
 
@@ -62,6 +63,32 @@ A Discord bot for monitoring your Jellyfin media server. MonolithBot keeps your 
    ```bash
    python -m bot.main --verbose
    ```
+
+### Test Modes
+
+Test modes trigger specific actions immediately on startup, useful for debugging and verification:
+
+```bash
+# Run all test modes (health check + announcement)
+python -m bot.main --test
+
+# Run only health check test (sends status message immediately)
+python -m bot.main --test-health
+
+# Run only announcement test (triggers announcement immediately)
+python -m bot.main --test-announcement
+
+# Combine with verbose for detailed output
+python -m bot.main --test --verbose
+```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--test` | `-t` | Run all test modes (equivalent to all individual flags) |
+| `--test-health` | | Run health check and send status message |
+| `--test-announcement` | | Trigger content announcement immediately |
+
+In test mode, announcements include extra metadata showing when items were added to the library, helping verify time filtering is working correctly.
 
 ### Docker Deployment
 
@@ -129,6 +156,7 @@ docker-compose -f docker-compose.local.yml up -d --build
 | `timezone` | `America/Los_Angeles` | Timezone for scheduling |
 | `health_check_interval_minutes` | `5` | How often to check server health |
 | `lookback_hours` | `24` | How far back to look for new content |
+| `max_items_per_type` | `10` | Maximum items to show per content type |
 
 ### Content Types
 
@@ -149,6 +177,7 @@ For Docker deployment, use these environment variables:
 | `SCHEDULE_TIMEZONE` | `schedule.timezone` |
 | `SCHEDULE_HEALTH_CHECK_INTERVAL` | `schedule.health_check_interval_minutes` |
 | `SCHEDULE_LOOKBACK_HOURS` | `schedule.lookback_hours` |
+| `SCHEDULE_MAX_ITEMS_PER_TYPE` | `schedule.max_items_per_type` |
 | `CONTENT_TYPES` | `content_types` (comma-separated) |
 
 **Note**: Environment variables take precedence over JSON config values.
@@ -159,6 +188,49 @@ For Docker deployment, use these environment variables:
 |---------|-------------|------------|
 | `/status` | Check bot and Jellyfin server status | Everyone |
 | `/announce` | Manually trigger a content announcement | Administrator |
+
+## Development
+
+### Running Tests
+
+MonolithBot includes a comprehensive test suite using pytest:
+
+```bash
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run with coverage report
+pytest --cov=bot --cov-report=term-missing
+
+# Run specific test file
+pytest tests/test_jellyfin.py
+```
+
+### Test Structure
+
+```
+tests/
+├── conftest.py           # Shared fixtures
+├── test_config.py        # Configuration tests
+├── test_jellyfin.py      # Jellyfin API client tests
+├── test_scheduler.py     # Scheduler utility tests
+├── test_announcements.py # Announcements cog tests
+└── test_health.py        # Health monitoring tests
+```
+
+### Continuous Integration
+
+Tests run automatically on every push and pull request via GitHub Actions. The CI workflow:
+
+- Runs tests on Python 3.10, 3.11, and 3.12
+- Generates coverage reports
+- Runs Ruff linter for code quality checks
 
 ## Getting Your Discord Channel ID
 
@@ -188,6 +260,12 @@ For Docker deployment, use these environment variables:
 - Check the channel ID is correct
 - Verify there's actually new content in the lookback period
 - Run `/status` to check connectivity
+- Use `--test-announcement` flag to trigger an immediate announcement for debugging
+
+### Old content appearing in announcements
+- The bot performs client-side filtering to ensure only content within the `lookback_hours` window is announced
+- Check that your Jellyfin server's timezone is configured correctly
+- Verify the `DateCreated` field is being set properly in Jellyfin
 
 ## GitHub Container Registry Setup (Maintainer)
 

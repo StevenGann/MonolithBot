@@ -1,0 +1,41 @@
+[project]
+name = "monolithbot"
+version = "1.0.0"
+description = "Discord bot for Jellyfin server monitoring and announcements"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "unit: Unit tests (fast, no external dependencies)",
+    "integration: Integration tests (may require mocked services)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:discord.*:",
+    "ignore::DeprecationWarning:apscheduler.*:",
+]
+
+[tool.coverage.run]
+source = ["bot"]
+branch = true
+omit = [
+    "bot/__pycache__/*",
+    "bot/*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+fail_under = 60
+show_missing = true

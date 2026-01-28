@@ -8,9 +8,12 @@ This module serves as the entry point for MonolithBot, handling:
 - Graceful shutdown on SIGINT/SIGTERM
 
 Usage:
-    python -m bot.main                    # Run with default config.json
-    python -m bot.main --config my.json   # Run with custom config file
-    python -m bot.main --verbose          # Run with debug logging
+    python -m bot.main                      # Run with default config.json
+    python -m bot.main --config my.json     # Run with custom config file
+    python -m bot.main --verbose            # Run with debug logging
+    python -m bot.main --test               # Run all test modes on startup
+    python -m bot.main --test-health        # Run health check test on startup
+    python -m bot.main --test-announcement  # Run announcement test on startup
 
 See Also:
     - bot.config: Configuration loading and validation
@@ -21,8 +24,8 @@ See Also:
 import argparse
 import asyncio
 import logging
-import signal
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 
@@ -33,6 +36,33 @@ from bot.config import Config, ConfigurationError, load_config
 
 # Module-level logger for MonolithBot core
 logger = logging.getLogger("monolithbot")
+
+
+@dataclass
+class TestModes:
+    """
+    Configuration for test modes that run on startup.
+
+    Each test mode triggers a specific feature immediately on bot startup,
+    useful for testing without waiting for scheduled times.
+
+    Attributes:
+        health: If True, run health check and send notification on startup.
+        announcement: If True, run content announcement on startup.
+    """
+
+    health: bool = False
+    announcement: bool = False
+
+    @property
+    def any_enabled(self) -> bool:
+        """Check if any test mode is enabled."""
+        return self.health or self.announcement
+
+    @classmethod
+    def all_enabled(cls) -> "TestModes":
+        """Create a TestModes instance with all modes enabled."""
+        return cls(health=True, announcement=True)
 
 
 class MonolithBot(commands.Bot):
@@ -46,7 +76,8 @@ class MonolithBot(commands.Bot):
     Attributes:
         config: The loaded configuration object containing Discord,
             Jellyfin, and scheduling settings.
-        test_mode: If True, run health check and announcement once on startup.
+        test_modes: TestModes instance controlling which tests run on startup.
+        test_mode: Convenience property that returns True if any test mode is enabled.
 
     Example:
         >>> config = load_config(Path("config.json"))
@@ -54,14 +85,17 @@ class MonolithBot(commands.Bot):
         >>> await bot.start(config.discord.token)
     """
 
-    def __init__(self, config: Config, test_mode: bool = False) -> None:
+    def __init__(
+        self, config: Config, test_modes: TestModes | None = None
+    ) -> None:
         """
         Initialize the MonolithBot instance.
 
         Args:
             config: Validated configuration object containing all settings
                 required for bot operation (Discord token, Jellyfin URL, etc.)
-            test_mode: If True, run health check and announcement once on startup.
+            test_modes: TestModes instance specifying which tests to run on startup.
+                If None, no tests are run.
         """
         # Configure Discord intents
         # We only need default intents for slash commands and sending messages
@@ -78,8 +112,18 @@ class MonolithBot(commands.Bot):
         )
 
         self.config = config
-        self.test_mode = test_mode
+        self._test_modes = test_modes or TestModes()
         self._shutdown_event = asyncio.Event()
+
+    @property
+    def test_mode(self) -> bool:
+        """Check if any test mode is enabled (for backward compatibility)."""
+        return self._test_modes.any_enabled
+
+    @property
+    def test_modes(self) -> TestModes:
+        """Get the test modes configuration."""
+        return self._test_modes
 
     async def setup_hook(self) -> None:
         """
@@ -147,9 +191,9 @@ class MonolithBot(commands.Bot):
                 f"{self.config.discord.alert_channel_id}"
             )
 
-        # Run test mode actions if enabled
-        if self.test_mode:
-            await self._run_test_mode()
+        # Run test mode actions if any are enabled
+        if self._test_modes.any_enabled:
+            await self._run_test_modes()
 
     async def on_error(self, event_method: str, *args, **kwargs) -> None:
         """
@@ -166,16 +210,33 @@ class MonolithBot(commands.Bot):
         """
         logger.exception(f"Error in event {event_method}")
 
-    async def _run_test_mode(self) -> None:
+    async def _run_test_modes(self) -> None:
         """
-        Run test mode actions: health notification and content announcement.
+        Run enabled test mode actions on startup.
 
-        Called once on startup when --test flag is provided. Useful for
-        testing without waiting for scheduled times.
+        Called once on startup when any test flags are provided. Each test
+        mode runs independently based on its flag.
         """
-        logger.info("=== TEST MODE: Running health check and announcement ===")
+        enabled_modes = []
+        if self._test_modes.health:
+            enabled_modes.append("health")
+        if self._test_modes.announcement:
+            enabled_modes.append("announcement")
 
-        # Get the health cog and trigger a test notification
+        logger.info(f"=== TEST MODE: Running {', '.join(enabled_modes)} ===")
+
+        # Run health test if enabled
+        if self._test_modes.health:
+            await self._run_health_test()
+
+        # Run announcement test if enabled
+        if self._test_modes.announcement:
+            await self._run_announcement_test()
+
+        logger.info("=== TEST MODE COMPLETE ===")
+
+    async def _run_health_test(self) -> None:
+        """Run health check test and send notification."""
         health_cog = self.get_cog("Health")
         if health_cog:
             logger.info("TEST: Sending health status notification...")
@@ -189,7 +250,8 @@ class MonolithBot(commands.Bot):
         else:
             logger.warning("TEST: Health cog not loaded")
 
-        # Get the announcements cog and trigger an announcement
+    async def _run_announcement_test(self) -> None:
+        """Run content announcement test."""
         announcements_cog = self.get_cog("Announcements")
         if announcements_cog:
             logger.info("TEST: Running content announcement...")
@@ -200,8 +262,6 @@ class MonolithBot(commands.Bot):
                 logger.error(f"TEST: Announcement failed: {e}")
         else:
             logger.warning("TEST: Announcements cog not loaded")
-
-        logger.info("=== TEST MODE COMPLETE ===")
 
     async def shutdown(self) -> None:
         """
@@ -252,15 +312,21 @@ def parse_args() -> argparse.Namespace:
         Namespace containing:
             - config (Path): Path to the configuration JSON file
             - verbose (bool): Whether to enable debug logging
+            - test (bool): Run all test modes
+            - test_health (bool): Run health check test
+            - test_announcement (bool): Run announcement test
     """
     parser = argparse.ArgumentParser(
         description="MonolithBot - Discord bot for Jellyfin monitoring",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m bot.main                    Run with default config.json
-  python -m bot.main --config my.json   Run with custom config file
-  python -m bot.main --verbose          Run with debug logging
+  python -m bot.main                      Run with default config.json
+  python -m bot.main --config my.json     Run with custom config file
+  python -m bot.main --verbose            Run with debug logging
+  python -m bot.main --test               Run all test modes on startup
+  python -m bot.main --test-health        Run health check test only
+  python -m bot.main --test-announcement  Run announcement test only
         """,
     )
 
@@ -279,17 +345,56 @@ Examples:
         help="Enable verbose/debug logging",
     )
 
-    parser.add_argument(
+    # Test mode arguments
+    test_group = parser.add_argument_group(
+        "test modes",
+        "Run specific features immediately on startup for testing",
+    )
+
+    test_group.add_argument(
         "--test",
         "-t",
         action="store_true",
-        help="Run health check and announcement once on startup for testing",
+        help="Run all test modes (health check + announcement)",
+    )
+
+    test_group.add_argument(
+        "--test-health",
+        action="store_true",
+        help="Run health check and send notification on startup",
+    )
+
+    test_group.add_argument(
+        "--test-announcement",
+        action="store_true",
+        help="Run content announcement on startup",
     )
 
     return parser.parse_args()
 
 
-async def run_bot(config: Config, test_mode: bool = False) -> None:
+def build_test_modes(args: argparse.Namespace) -> TestModes:
+    """
+    Build TestModes from parsed command-line arguments.
+
+    Args:
+        args: Parsed argument namespace containing test flags.
+
+    Returns:
+        TestModes instance with appropriate flags set.
+    """
+    # If --test is set, enable all test modes
+    if args.test:
+        return TestModes.all_enabled()
+
+    # Otherwise, enable individual test modes as specified
+    return TestModes(
+        health=args.test_health,
+        announcement=args.test_announcement,
+    )
+
+
+async def run_bot(config: Config, test_modes: TestModes) -> None:
     """
     Run the bot with the given configuration.
 
@@ -299,12 +404,12 @@ async def run_bot(config: Config, test_mode: bool = False) -> None:
 
     Args:
         config: Validated configuration object.
-        test_mode: If True, run health check and announcement once on startup.
+        test_modes: TestModes instance specifying which tests to run on startup.
 
     Raises:
         SystemExit: On invalid Discord token or fatal errors.
     """
-    bot = MonolithBot(config, test_mode=test_mode)
+    bot = MonolithBot(config, test_modes=test_modes)
 
     def signal_handler() -> None:
         """Handle shutdown signals (SIGINT, SIGTERM)."""
@@ -337,7 +442,8 @@ def main() -> NoReturn | None:
     1. Parse command-line arguments
     2. Configure logging
     3. Load and validate configuration
-    4. Start the bot
+    4. Build test modes from arguments
+    5. Start the bot
 
     Returns:
         None on successful shutdown, or exits with code 1 on error.
@@ -361,9 +467,19 @@ def main() -> NoReturn | None:
     logger.info(f"Timezone: {config.schedule.timezone}")
     logger.info(f"Content types: {', '.join(config.content_types)}")
 
+    # Build test modes from command-line arguments
+    test_modes = build_test_modes(args)
+    if test_modes.any_enabled:
+        enabled = []
+        if test_modes.health:
+            enabled.append("health")
+        if test_modes.announcement:
+            enabled.append("announcement")
+        logger.info(f"Test modes enabled: {', '.join(enabled)}")
+
     # Run the bot
     try:
-        asyncio.run(run_bot(config, test_mode=args.test))
+        asyncio.run(run_bot(config, test_modes=test_modes))
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, shutting down...")
 

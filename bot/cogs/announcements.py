@@ -400,6 +400,7 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
             - Episodes: Series name
             - Audio: Artist(s), Album
             - All types: Year (if available)
+            - Test mode: Date added to library (for validating time filtering)
 
         Args:
             embed: The embed to add fields to (modified in place).
@@ -423,6 +424,14 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         # Universal: show year if available
         if item.year:
             embed.add_field(name="Year", value=str(item.year), inline=True)
+
+        # Test mode: show date added to help validate time filtering
+        if self.bot.test_mode and item.date_created:
+            embed.add_field(
+                name="Added to Library",
+                value=f"<t:{int(item.date_created.timestamp())}:F>",
+                inline=False,
+            )
 
     # -------------------------------------------------------------------------
     # Display Helpers

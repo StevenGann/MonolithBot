@@ -49,15 +49,26 @@ MonolithBot/
 │       ├── __init__.py
 │       ├── jellyfin.py           # Jellyfin API client
 │       └── scheduler.py          # APScheduler factory and utilities
+├── tests/                        # Test suite
+│   ├── __init__.py
+│   ├── conftest.py               # Shared pytest fixtures
+│   ├── test_config.py            # Configuration tests
+│   ├── test_jellyfin.py          # Jellyfin API client tests
+│   ├── test_scheduler.py         # Scheduler utility tests
+│   ├── test_announcements.py     # Announcements cog tests
+│   └── test_health.py            # Health monitoring tests
 ├── .github/
 │   └── workflows/
-│       └── docker-publish.yml    # CI/CD for Docker image
+│       ├── docker-publish.yml    # CI/CD for Docker image
+│       └── ci.yml                # Test and lint workflow
 ├── config.json.example           # Example JSON configuration
 ├── .env.example                  # Example environment variables
 ├── docker-compose.yml            # Production deployment (pulls from GHCR)
 ├── docker-compose.local.yml      # Local development (builds from source)
 ├── Dockerfile                    # Container image definition
 ├── requirements.txt              # Python dependencies
+├── requirements-dev.txt          # Development dependencies (testing, linting)
+├── pyproject.toml                # Project config and pytest settings
 ├── README.md                     # User documentation
 └── ARCHITECTURE.md               # This file
 ```
@@ -70,19 +81,55 @@ MonolithBot/
 
 The main module handles:
 
-- **CLI argument parsing**: `--config` for custom config path, `--verbose` for debug logging
+- **CLI argument parsing**: `--config` for custom config path, `--verbose` for debug logging, granular `--test*` flags
 - **Bot initialization**: Creates `MonolithBot` instance with proper Discord intents
 - **Cog loading**: Automatically loads all cogs from `bot/cogs/`
 - **Graceful shutdown**: Handles SIGINT/SIGTERM signals
+- **Test modes**: Granular control over which test actions to trigger on startup
 
 ```python
+# Test modes dataclass for granular control
+@dataclass
+class TestModes:
+    health: bool = False       # Run health check test
+    announcement: bool = False # Run announcement test
+
+    @property
+    def any_enabled(self) -> bool:
+        return self.health or self.announcement
+
+    @classmethod
+    def all_enabled(cls) -> "TestModes":
+        return cls(health=True, announcement=True)
+
 # Key class
 class MonolithBot(commands.Bot):
-    def __init__(self, config: Config):
-        self.config = config  # Config available to all cogs via self.bot.config
+    def __init__(self, config: Config, test_modes: TestModes | None = None):
+        self.config = config        # Config available to all cogs via self.bot.config
+        self._test_modes = test_modes or TestModes()
+
+    @property
+    def test_mode(self) -> bool:
+        """Backward compatible check if any test mode is enabled."""
+        return self._test_modes.any_enabled
 ```
 
-**Run with**: `python -m bot.main` or `python -m bot.main --config ./myconfig.json`
+**CLI flags**:
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--test` | `-t` | Run all test modes |
+| `--test-health` | | Run health check and send status message |
+| `--test-announcement` | | Trigger content announcement immediately |
+| `--config` | `-c` | Custom config file path |
+| `--verbose` | `-v` | Enable debug logging |
+
+**Run examples**:
+```bash
+python -m bot.main                          # Normal operation
+python -m bot.main --test                   # All test modes
+python -m bot.main --test-health            # Health test only
+python -m bot.main --test-announcement -v   # Announcement test with verbose logging
+```
 
 ### 2. Configuration (`bot/config.py`)
 
@@ -119,13 +166,21 @@ class JellyfinClient:
 ```
 
 **Key data classes**:
-- `JellyfinItem`: Represents a media item (movie, episode, song)
+- `JellyfinItem`: Represents a media item (movie, episode, song) with `date_created` timestamp
 - `ServerInfo`: Server name, version, OS
 
 **Error hierarchy**:
 - `JellyfinError`: Base exception
 - `JellyfinConnectionError`: Server unreachable
 - `JellyfinAuthError`: Invalid API key
+
+**Client-side date filtering**: The `get_recent_items()` method performs client-side filtering on the `date_created` field to ensure only items within the configured `lookback_hours` window are returned. This provides robust filtering regardless of Jellyfin API behavior:
+
+```python
+# Items are filtered after fetching to ensure correct time window
+if parsed_item.date_created is not None and parsed_item.date_created >= cutoff:
+    parsed_items.append(parsed_item)
+```
 
 ### 4. Announcements Cog (`bot/cogs/announcements.py`)
 
@@ -439,6 +494,8 @@ Run with `--verbose` for DEBUG level logging.
 
 ## Testing Locally
 
+### Running the Bot
+
 1. Copy and edit config:
    ```bash
    cp config.json.example config.json
@@ -453,6 +510,146 @@ Run with `--verbose` for DEBUG level logging.
 
 4. Use `/announce` command to test announcements without waiting for schedule
 
+5. Use granular test modes to trigger specific actions immediately:
+   ```bash
+   # Run all test modes (health check + announcement)
+   python -m bot.main --test
+
+   # Test only health check functionality
+   python -m bot.main --test-health
+
+   # Test only announcement functionality
+   python -m bot.main --test-announcement
+
+   # Combine with verbose for debugging
+   python -m bot.main --test-announcement --verbose
+   ```
+
+**Note**: In test mode, announcement embeds include additional metadata showing when items were added to the library, helping verify that time filtering is working correctly.
+
+---
+
+## Testing
+
+### Test Framework
+
+MonolithBot uses **pytest** with the following extensions:
+
+| Package | Purpose |
+|---------|---------|
+| `pytest` | Test framework |
+| `pytest-asyncio` | Async test support |
+| `pytest-cov` | Coverage reporting |
+| `aioresponses` | Mock aiohttp responses |
+
+### Running Tests
+
+```bash
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run with coverage
+pytest --cov=bot --cov-report=term-missing
+
+# Run specific test file
+pytest tests/test_jellyfin.py
+
+# Run specific test class or method
+pytest tests/test_jellyfin.py::TestJellyfinClient::test_check_health_success
+```
+
+### Test Structure
+
+```
+tests/
+├── conftest.py           # Shared fixtures (configs, mocks, sample data)
+├── test_config.py        # Config loading, validation, env var handling
+├── test_jellyfin.py      # API client, HTTP mocking, date parsing
+├── test_scheduler.py     # Scheduler creation, time parsing
+├── test_announcements.py # Embed creation, content type handling
+└── test_health.py        # Health checks, state transitions, notifications
+```
+
+### Key Fixtures (`conftest.py`)
+
+| Fixture | Description |
+|---------|-------------|
+| `config` | Complete mock Config object |
+| `mock_bot` | Mock MonolithBot with config and channels |
+| `mock_discord_channel` | Mock Discord TextChannel |
+| `jellyfin_movie` | Sample JellyfinItem (Movie) |
+| `jellyfin_episode` | Sample JellyfinItem (Episode) |
+| `server_info` | Sample ServerInfo response |
+
+### Writing New Tests
+
+```python
+import pytest
+from unittest.mock import AsyncMock, MagicMock
+
+class TestMyFeature:
+    @pytest.fixture
+    def my_fixture(self, mock_bot):
+        # Setup code using existing fixtures
+        return MyClass(mock_bot)
+
+    @pytest.mark.asyncio
+    async def test_async_method(self, my_fixture):
+        result = await my_fixture.do_something()
+        assert result == expected
+
+    def test_sync_method(self, my_fixture):
+        result = my_fixture.calculate()
+        assert result == 42
+```
+
+### Mocking HTTP Requests
+
+Use `aioresponses` to mock Jellyfin API calls:
+
+```python
+from aioresponses import aioresponses
+import re
+
+@pytest.mark.asyncio
+async def test_api_call(self, client):
+    with aioresponses() as mocked:
+        # Mock with exact URL
+        mocked.get("http://localhost:8096/System/Info", payload={"ServerName": "Test"})
+
+        # Mock with regex for URLs with query params
+        mocked.get(re.compile(r"^http://localhost:8096/Items\?.*"), payload={"Items": []})
+
+        result = await client.check_health()
+        assert result.server_name == "Test"
+```
+
+### Continuous Integration
+
+The `.github/workflows/ci.yml` workflow runs on every push and PR:
+
+1. **Test Job**: Runs pytest on Python 3.10, 3.11, and 3.12
+2. **Lint Job**: Runs Ruff for code quality checks
+
+```yaml
+# Tests run automatically on:
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+```
+
+### Coverage Requirements
+
+The project has a minimum coverage threshold of 60% configured in `pyproject.toml`. Current coverage is ~69%.
+
 ---
 
 ## Common Tasks
@@ -464,3 +661,7 @@ Run with `--verbose` for DEBUG level logging.
 | Change health check behavior | `health.py` → `_run_health_check()` | Modify check logic or notifications |
 | Add new Jellyfin API call | `jellyfin.py` | Add new async method |
 | Add new slash command | Any cog | Use `@app_commands.command` decorator |
+| Add new configuration option | `config.py` | Add to dataclass and builder function |
+| Add tests for new feature | `tests/` | Create test file or add to existing |
+| Run tests | Terminal | `pytest` or `pytest -v --cov=bot` |
+| Debug test mode output | `announcements.py` → `_add_item_fields()` | Shows `date_created` in test mode |
