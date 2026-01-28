@@ -560,6 +560,39 @@ class JellyfinClient:
         """
         return f"{self.base_url}/web/index.html#!/details?id={item_id}"
 
+    def get_recently_added_url(self, content_type: str) -> str:
+        """
+        Build URL to the recently added page for a specific content type.
+
+        Creates a link to a filtered Jellyfin list view showing items
+        of the specified type, sorted by date added (newest first).
+
+        Args:
+            content_type: Content type to filter by (e.g., "Movie", "Series").
+                Supports both Jellyfin types and aliases like "Music".
+
+        Returns:
+            Full URL to the filtered recently added view in Jellyfin.
+
+        Example:
+            >>> url = client.get_recently_added_url("Movie")
+            >>> # Returns: http://localhost:8096/web/index.html#!/list.html?type=Movie&sortBy=DateCreated&sortOrder=Descending
+        """
+        # Map user-friendly names to Jellyfin API types
+        type_mapping = {
+            "Movie": "Movie",
+            "Series": "Series",
+            "Audio": "Audio",
+            "Music": "Audio",
+            "Episode": "Episode",
+        }
+        jellyfin_type = type_mapping.get(content_type, content_type)
+
+        return (
+            f"{self.base_url}/web/index.html#!/list.html"
+            f"?type={jellyfin_type}&sortBy=DateCreated&sortOrder=Descending"
+        )
+
     # -------------------------------------------------------------------------
     # Private Helpers
     # -------------------------------------------------------------------------

@@ -329,9 +329,11 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         # Get max items from config
         max_items = self.bot.config.schedule.max_items_per_type
 
-        # Send section header
+        # Send section header with link to Recently Added page
+        recently_added_url = self.jellyfin.get_recently_added_url(content_type)
         section_embed = discord.Embed(
             title=f"{emoji} New {type_name}",
+            url=recently_added_url,
             color=color,
         )
         await channel.send(embed=section_embed)

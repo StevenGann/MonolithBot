@@ -240,6 +240,48 @@ class TestJellyfinClientUrls:
         url = client.get_item_url("item-123")
         assert url == "http://localhost:8096/web/index.html#!/details?id=item-123"
 
+    def test_get_recently_added_url_movie(self, client: JellyfinClient) -> None:
+        """Test building recently added URL for movies."""
+        url = client.get_recently_added_url("Movie")
+        assert url == (
+            "http://localhost:8096/web/index.html#!/list.html"
+            "?type=Movie&sortBy=DateCreated&sortOrder=Descending"
+        )
+
+    def test_get_recently_added_url_series(self, client: JellyfinClient) -> None:
+        """Test building recently added URL for TV series."""
+        url = client.get_recently_added_url("Series")
+        assert url == (
+            "http://localhost:8096/web/index.html#!/list.html"
+            "?type=Series&sortBy=DateCreated&sortOrder=Descending"
+        )
+
+    def test_get_recently_added_url_audio(self, client: JellyfinClient) -> None:
+        """Test building recently added URL for audio."""
+        url = client.get_recently_added_url("Audio")
+        assert url == (
+            "http://localhost:8096/web/index.html#!/list.html"
+            "?type=Audio&sortBy=DateCreated&sortOrder=Descending"
+        )
+
+    def test_get_recently_added_url_music_alias(self, client: JellyfinClient) -> None:
+        """Test that Music maps to Audio type in URL."""
+        url = client.get_recently_added_url("Music")
+        assert url == (
+            "http://localhost:8096/web/index.html#!/list.html"
+            "?type=Audio&sortBy=DateCreated&sortOrder=Descending"
+        )
+
+    def test_get_recently_added_url_unknown_passthrough(
+        self, client: JellyfinClient
+    ) -> None:
+        """Test that unknown content types pass through unchanged."""
+        url = client.get_recently_added_url("Unknown")
+        assert url == (
+            "http://localhost:8096/web/index.html#!/list.html"
+            "?type=Unknown&sortBy=DateCreated&sortOrder=Descending"
+        )
+
 
 # =============================================================================
 # JellyfinClient HTTP Tests
