@@ -49,20 +49,22 @@ class TestModes:
     Attributes:
         health: If True, run health check and send notification on startup.
         announcement: If True, run content announcement on startup.
+        suggestion: If True, run random suggestions on startup.
     """
 
     health: bool = False
     announcement: bool = False
+    suggestion: bool = False
 
     @property
     def any_enabled(self) -> bool:
         """Check if any test mode is enabled."""
-        return self.health or self.announcement
+        return self.health or self.announcement or self.suggestion
 
     @classmethod
     def all_enabled(cls) -> "TestModes":
         """Create a TestModes instance with all modes enabled."""
-        return cls(health=True, announcement=True)
+        return cls(health=True, announcement=True, suggestion=True)
 
 
 class MonolithBot(commands.Bot):
@@ -143,6 +145,7 @@ class MonolithBot(commands.Bot):
         cogs_to_load = [
             "bot.cogs.announcements",
             "bot.cogs.health",
+            "bot.cogs.suggestions",
         ]
 
         for cog in cogs_to_load:
@@ -222,6 +225,8 @@ class MonolithBot(commands.Bot):
             enabled_modes.append("health")
         if self._test_modes.announcement:
             enabled_modes.append("announcement")
+        if self._test_modes.suggestion:
+            enabled_modes.append("suggestion")
 
         logger.info(f"=== TEST MODE: Running {', '.join(enabled_modes)} ===")
 
@@ -232,6 +237,10 @@ class MonolithBot(commands.Bot):
         # Run announcement test if enabled
         if self._test_modes.announcement:
             await self._run_announcement_test()
+
+        # Run suggestion test if enabled
+        if self._test_modes.suggestion:
+            await self._run_suggestion_test()
 
         logger.info("=== TEST MODE COMPLETE ===")
 
@@ -262,6 +271,19 @@ class MonolithBot(commands.Bot):
                 logger.error(f"TEST: Announcement failed: {e}")
         else:
             logger.warning("TEST: Announcements cog not loaded")
+
+    async def _run_suggestion_test(self) -> None:
+        """Run random suggestion test."""
+        suggestions_cog = self.get_cog("Suggestions")
+        if suggestions_cog:
+            logger.info("TEST: Running random suggestions...")
+            try:
+                count = await suggestions_cog.post_random_suggestions()
+                logger.info(f"TEST: Posted {count} suggestions!")
+            except Exception as e:
+                logger.error(f"TEST: Suggestion failed: {e}")
+        else:
+            logger.warning("TEST: Suggestions cog not loaded")
 
     async def shutdown(self) -> None:
         """
@@ -327,6 +349,7 @@ Examples:
   python -m bot.main --test               Run all test modes on startup
   python -m bot.main --test-health        Run health check test only
   python -m bot.main --test-announcement  Run announcement test only
+  python -m bot.main --test-suggestion    Run suggestion test only
         """,
     )
 
@@ -355,7 +378,7 @@ Examples:
         "--test",
         "-t",
         action="store_true",
-        help="Run all test modes (health check + announcement)",
+        help="Run all test modes (health check + announcement + suggestion)",
     )
 
     test_group.add_argument(
@@ -368,6 +391,12 @@ Examples:
         "--test-announcement",
         action="store_true",
         help="Run content announcement on startup",
+    )
+
+    test_group.add_argument(
+        "--test-suggestion",
+        action="store_true",
+        help="Run random suggestions on startup",
     )
 
     return parser.parse_args()
@@ -391,6 +420,7 @@ def build_test_modes(args: argparse.Namespace) -> TestModes:
     return TestModes(
         health=args.test_health,
         announcement=args.test_announcement,
+        suggestion=args.test_suggestion,
     )
 
 

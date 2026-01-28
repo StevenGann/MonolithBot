@@ -415,8 +415,26 @@ class JellyfinClient:
             "Fields": "Overview,DateCreated,ProductionYear,Artists,Album,SeriesName",
         }
 
+        logger.debug(
+            f"Querying Jellyfin /Items: type={item_type}, "
+            f"lookback={hours}h, cutoff={cutoff_str}, limit={limit}"
+        )
+
         data = await self._request("GET", "/Items", params=params)
         items = data.get("Items", [])
+
+        # Log the raw response for debugging
+        logger.debug(
+            f"Jellyfin /Items response for type={item_type}: "
+            f"TotalRecordCount={data.get('TotalRecordCount', 'N/A')}, "
+            f"Items returned={len(items)}"
+        )
+        for i, item in enumerate(items):
+            logger.debug(
+                f"  [{i}] {item.get('Name', 'Unknown')} "
+                f"(Id={item.get('Id')}, Type={item.get('Type')}, "
+                f"DateCreated={item.get('DateCreated', 'None')})"
+            )
 
         # Parse items and apply client-side date filtering
         # This ensures we only return items within the lookback window,
@@ -499,6 +517,85 @@ class JellyfinClient:
             items = await self.get_recent_items(jellyfin_type, hours=hours)
             if items:
                 results[content_type] = items
+
+        return results
+
+    async def get_random_item(
+        self,
+        item_type: str,
+    ) -> Optional[JellyfinItem]:
+        """
+        Get a random item of a specific type from the library.
+
+        Queries the Jellyfin library for a single random item of the
+        specified type. Useful for suggestion features.
+
+        Args:
+            item_type: Jellyfin item type to query. Valid values:
+                - "Movie": Feature films
+                - "Series": TV series
+                - "Audio": Music tracks
+                - "MusicAlbum": Music albums
+
+        Returns:
+            A single random JellyfinItem, or None if no items exist.
+
+        Example:
+            >>> movie = await client.get_random_item("Movie")
+            >>> if movie:
+            ...     print(f"Suggestion: {movie.display_title}")
+        """
+        # Map user-friendly type names to Jellyfin API types
+        jellyfin_type = self._map_content_type(item_type)
+
+        params = {
+            "SortBy": "Random",
+            "Limit": "1",
+            "IncludeItemTypes": jellyfin_type,
+            "Recursive": "true",
+            "Fields": "Overview,DateCreated,ProductionYear,Artists,Album,SeriesName",
+        }
+
+        data = await self._request("GET", "/Items", params=params)
+        items = data.get("Items", [])
+
+        if not items:
+            return None
+
+        return self._parse_item(items[0])
+
+    async def get_random_items_by_type(
+        self,
+        content_types: list[str],
+    ) -> dict[str, JellyfinItem]:
+        """
+        Get a random item for each specified content type.
+
+        Convenience method that fetches one random item per content type.
+        Only types with results are included in the response.
+
+        Args:
+            content_types: List of content types to get random items for.
+                Supports both Jellyfin types ("Movie", "Series", "MusicAlbum")
+                and aliases ("Music" → "Audio").
+
+        Returns:
+            Dictionary mapping content type names to single random items.
+            Types with no items are omitted from the dict.
+
+        Example:
+            >>> suggestions = await client.get_random_items_by_type(
+            ...     ["Movie", "Series", "MusicAlbum"]
+            ... )
+            >>> for content_type, item in suggestions.items():
+            ...     print(f"{content_type}: {item.display_title}")
+        """
+        results: dict[str, JellyfinItem] = {}
+
+        for content_type in content_types:
+            item = await self.get_random_item(content_type)
+            if item:
+                results[content_type] = item
 
         return results
 
@@ -616,6 +713,7 @@ class JellyfinClient:
             "Series": "Series",
             "Audio": "Audio",
             "Music": "Audio",  # Alias for user convenience
+            "MusicAlbum": "MusicAlbum",  # For random album suggestions
             "Episode": "Episode",
         }
         return mapping.get(content_type, content_type)

@@ -94,11 +94,13 @@ class JellyfinConfig:
 @dataclass
 class ScheduleConfig:
     """
-    Scheduling configuration for announcements and health checks.
+    Scheduling configuration for announcements, suggestions, and health checks.
 
     Attributes:
         announcement_times: List of times to announce new content in HH:MM format
             (24-hour). Example: ["09:00", "17:00", "21:00"]
+        suggestion_times: List of times to post random suggestions in HH:MM format
+            (24-hour). Example: ["12:00", "20:00"]
         timezone: IANA timezone name for interpreting announcement times.
             Example: "America/Los_Angeles", "Europe/London", "UTC"
         health_check_interval_minutes: How often to check if Jellyfin is online.
@@ -110,6 +112,7 @@ class ScheduleConfig:
     """
 
     announcement_times: list[str] = field(default_factory=lambda: ["17:00"])
+    suggestion_times: list[str] = field(default_factory=list)
     timezone: str = "America/Los_Angeles"
     health_check_interval_minutes: int = 5
     lookback_hours: int = 24
@@ -378,6 +381,7 @@ def _build_schedule_config(json_config: dict[str, Any]) -> ScheduleConfig:
 
     Environment Variables:
         - SCHEDULE_ANNOUNCEMENT_TIMES: Comma-separated times (e.g., "09:00,17:00")
+        - SCHEDULE_SUGGESTION_TIMES: Comma-separated times (e.g., "12:00,20:00")
         - SCHEDULE_TIMEZONE: IANA timezone name
         - SCHEDULE_HEALTH_CHECK_INTERVAL: Minutes between health checks
         - SCHEDULE_LOOKBACK_HOURS: Hours to look back for new content
@@ -387,6 +391,10 @@ def _build_schedule_config(json_config: dict[str, Any]) -> ScheduleConfig:
     announcement_times = _get_env_list(
         "SCHEDULE_ANNOUNCEMENT_TIMES"
     ) or schedule_json.get("announcement_times", ["17:00"])
+
+    suggestion_times = _get_env_list(
+        "SCHEDULE_SUGGESTION_TIMES"
+    ) or schedule_json.get("suggestion_times", [])
 
     timezone = _get_env("SCHEDULE_TIMEZONE") or schedule_json.get(
         "timezone", "America/Los_Angeles"
@@ -406,6 +414,7 @@ def _build_schedule_config(json_config: dict[str, Any]) -> ScheduleConfig:
 
     return ScheduleConfig(
         announcement_times=announcement_times,
+        suggestion_times=suggestion_times,
         timezone=timezone,
         health_check_interval_minutes=health_check_interval,
         lookback_hours=lookback_hours,

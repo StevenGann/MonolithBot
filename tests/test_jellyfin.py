@@ -633,10 +633,98 @@ class TestJellyfinClientHttp:
 
         await client.close()
 
+    @pytest.mark.asyncio
+    async def test_get_random_item_success(self, client: JellyfinClient) -> None:
+        """Test getting a random item."""
+        with aioresponses() as mocked:
+            mocked.get(
+                re.compile(r"^http://localhost:8096/Items\?.*"),
+                payload={
+                    "Items": [
+                        {
+                            "Id": "random-movie",
+                            "Name": "Random Movie",
+                            "Type": "Movie",
+                            "ProductionYear": 2024,
+                        }
+                    ],
+                    "TotalRecordCount": 1,
+                },
+            )
 
-# =============================================================================
-# JellyfinClient Content Type Mapping Tests
-# =============================================================================
+            item = await client.get_random_item("Movie")
+
+            assert item is not None
+            assert item.id == "random-movie"
+            assert item.name == "Random Movie"
+            assert item.item_type == "Movie"
+            assert item.year == 2024
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_random_item_empty(self, client: JellyfinClient) -> None:
+        """Test getting a random item when library is empty."""
+        with aioresponses() as mocked:
+            mocked.get(
+                re.compile(r"^http://localhost:8096/Items\?.*"),
+                payload={
+                    "Items": [],
+                    "TotalRecordCount": 0,
+                },
+            )
+
+            item = await client.get_random_item("Movie")
+
+            assert item is None
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_random_items_by_type(self, client: JellyfinClient) -> None:
+        """Test getting random items for multiple content types."""
+        with aioresponses() as mocked:
+            # Mock responses for each type
+            mocked.get(
+                re.compile(r"^http://localhost:8096/Items\?.*"),
+                payload={
+                    "Items": [
+                        {
+                            "Id": "movie-1",
+                            "Name": "Random Movie",
+                            "Type": "Movie",
+                        }
+                    ],
+                },
+            )
+            mocked.get(
+                re.compile(r"^http://localhost:8096/Items\?.*"),
+                payload={
+                    "Items": [
+                        {
+                            "Id": "series-1",
+                            "Name": "Random Series",
+                            "Type": "Series",
+                        }
+                    ],
+                },
+            )
+            mocked.get(
+                re.compile(r"^http://localhost:8096/Items\?.*"),
+                payload={"Items": []},  # No albums
+            )
+
+            results = await client.get_random_items_by_type(
+                ["Movie", "Series", "MusicAlbum"]
+            )
+
+            assert "Movie" in results
+            assert "Series" in results
+            assert "MusicAlbum" not in results  # Empty
+            assert results["Movie"].name == "Random Movie"
+            assert results["Series"].name == "Random Series"
+
+        await client.close()
 
 
 class TestJellyfinClientContentTypeMapping:
@@ -665,6 +753,10 @@ class TestJellyfinClientContentTypeMapping:
     def test_map_music_alias(self, client: JellyfinClient) -> None:
         """Test Music maps to Audio."""
         assert client._map_content_type("Music") == "Audio"
+
+    def test_map_music_album(self, client: JellyfinClient) -> None:
+        """Test MusicAlbum type mapping."""
+        assert client._map_content_type("MusicAlbum") == "MusicAlbum"
 
     def test_map_unknown_passthrough(self, client: JellyfinClient) -> None:
         """Test unknown types pass through unchanged."""
