@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-from bot.config import Config, DiscordConfig, JellyfinConfig, ScheduleConfig
+from bot.config import Config, DiscordConfig, JellyfinConfig, JellyfinScheduleConfig
 from bot.services.jellyfin import JellyfinItem, ServerInfo
 
 
@@ -31,19 +31,11 @@ def discord_config() -> DiscordConfig:
 
 
 @pytest.fixture
-def jellyfin_config() -> JellyfinConfig:
-    """Create a mock Jellyfin configuration."""
-    return JellyfinConfig(
-        url="http://localhost:8096",
-        api_key="test-api-key-12345",
-    )
-
-
-@pytest.fixture
-def schedule_config() -> ScheduleConfig:
-    """Create a mock schedule configuration."""
-    return ScheduleConfig(
+def jellyfin_schedule_config() -> JellyfinScheduleConfig:
+    """Create a mock Jellyfin schedule configuration."""
+    return JellyfinScheduleConfig(
         announcement_times=["09:00", "17:00"],
+        suggestion_times=["12:00", "20:00"],
         timezone="America/Los_Angeles",
         health_check_interval_minutes=5,
         lookback_hours=24,
@@ -52,17 +44,26 @@ def schedule_config() -> ScheduleConfig:
 
 
 @pytest.fixture
+def jellyfin_config(jellyfin_schedule_config: JellyfinScheduleConfig) -> JellyfinConfig:
+    """Create a mock Jellyfin configuration."""
+    return JellyfinConfig(
+        enabled=True,
+        url="http://localhost:8096",
+        api_key="test-api-key-12345",
+        content_types=["Movie", "Series", "Audio"],
+        schedule=jellyfin_schedule_config,
+    )
+
+
+@pytest.fixture
 def config(
     discord_config: DiscordConfig,
     jellyfin_config: JellyfinConfig,
-    schedule_config: ScheduleConfig,
 ) -> Config:
     """Create a complete mock configuration."""
     return Config(
         discord=discord_config,
         jellyfin=jellyfin_config,
-        schedule=schedule_config,
-        content_types=["Movie", "Series", "Audio"],
     )
 
 
@@ -76,17 +77,19 @@ def config_json() -> dict[str, Any]:
             "alert_channel_id": 444555666,
         },
         "jellyfin": {
+            "enabled": True,
             "url": "http://jellyfin.local:8096",
             "api_key": "json-api-key",
+            "content_types": ["Movie", "Series"],
+            "schedule": {
+                "announcement_times": ["12:00", "20:00"],
+                "suggestion_times": ["10:00", "18:00"],
+                "timezone": "UTC",
+                "health_check_interval_minutes": 10,
+                "lookback_hours": 48,
+                "max_items_per_type": 5,
+            },
         },
-        "schedule": {
-            "announcement_times": ["12:00", "20:00"],
-            "timezone": "UTC",
-            "health_check_interval_minutes": 10,
-            "lookback_hours": 48,
-            "max_items_per_type": 5,
-        },
-        "content_types": ["Movie", "Series"],
     }
 
 

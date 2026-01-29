@@ -1,5 +1,4 @@
-"""
-Unit tests for bot/cogs/announcements.py - Announcements cog.
+"""Unit tests for bot/cogs/jellyfin/announcements.py - Jellyfin Announcements cog.
 
 Tests cover:
     - Embed creation for different content types
@@ -26,11 +25,11 @@ from bot.services.jellyfin import JellyfinItem
 def create_announcements_cog(
     mock_bot: MagicMock,
 ) -> Any:
-    """Create an AnnouncementsCog with mocked dependencies."""
-    with patch("bot.cogs.announcements.create_scheduler"):
-        from bot.cogs.announcements import AnnouncementsCog
+    """Create a JellyfinAnnouncementsCog with mocked dependencies."""
+    with patch("bot.cogs.jellyfin.announcements.create_scheduler"):
+        from bot.cogs.jellyfin.announcements import JellyfinAnnouncementsCog
 
-        cog = AnnouncementsCog(mock_bot)
+        cog = JellyfinAnnouncementsCog(mock_bot)
         # Create a mock jellyfin client
         cog.jellyfin = MagicMock()
         cog.jellyfin.get_item_url = MagicMock(
@@ -345,37 +344,37 @@ class TestContentTypeConstants:
 
     def test_movie_color_is_blue(self) -> None:
         """Test Movie color is blue."""
-        from bot.cogs.announcements import CONTENT_TYPE_COLORS
+        from bot.cogs.jellyfin.announcements import CONTENT_TYPE_COLORS
 
         assert CONTENT_TYPE_COLORS["Movie"] == discord.Color.blue()
 
     def test_series_color_is_green(self) -> None:
         """Test Series color is green."""
-        from bot.cogs.announcements import CONTENT_TYPE_COLORS
+        from bot.cogs.jellyfin.announcements import CONTENT_TYPE_COLORS
 
         assert CONTENT_TYPE_COLORS["Series"] == discord.Color.green()
 
     def test_audio_color_is_purple(self) -> None:
         """Test Audio color is purple."""
-        from bot.cogs.announcements import CONTENT_TYPE_COLORS
+        from bot.cogs.jellyfin.announcements import CONTENT_TYPE_COLORS
 
         assert CONTENT_TYPE_COLORS["Audio"] == discord.Color.purple()
 
     def test_movie_emoji(self) -> None:
         """Test Movie emoji is correct."""
-        from bot.cogs.announcements import CONTENT_TYPE_EMOJI
+        from bot.cogs.jellyfin.announcements import CONTENT_TYPE_EMOJI
 
         assert CONTENT_TYPE_EMOJI["Movie"] == "🎬"
 
     def test_series_emoji(self) -> None:
         """Test Series emoji is correct."""
-        from bot.cogs.announcements import CONTENT_TYPE_EMOJI
+        from bot.cogs.jellyfin.announcements import CONTENT_TYPE_EMOJI
 
         assert CONTENT_TYPE_EMOJI["Series"] == "📺"
 
     def test_audio_emoji(self) -> None:
         """Test Audio emoji is correct."""
-        from bot.cogs.announcements import CONTENT_TYPE_EMOJI
+        from bot.cogs.jellyfin.announcements import CONTENT_TYPE_EMOJI
 
         assert CONTENT_TYPE_EMOJI["Audio"] == "🎵"
 

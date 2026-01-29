@@ -18,16 +18,30 @@ Example JSON config (config.json):
             "announcement_channel_id": 123456789
         },
         "jellyfin": {
+            "enabled": true,
             "url": "http://localhost:8096",
-            "api_key": "API_KEY"
+            "api_key": "API_KEY",
+            "content_types": ["Movie", "Series", "Audio"],
+            "schedule": {
+                "announcement_times": ["17:00"],
+                "suggestion_times": ["12:00", "20:00"],
+                "timezone": "America/Los_Angeles",
+                "health_check_interval_minutes": 5,
+                "lookback_hours": 24,
+                "max_items_per_type": 10
+            }
         }
     }
 
 Equivalent environment variables:
     DISCORD_TOKEN=BOT_TOKEN
     DISCORD_ANNOUNCEMENT_CHANNEL_ID=123456789
+    JELLYFIN_ENABLED=true
     JELLYFIN_URL=http://localhost:8096
     JELLYFIN_API_KEY=API_KEY
+    JELLYFIN_CONTENT_TYPES=Movie,Series,Audio
+    JELLYFIN_SCHEDULE_ANNOUNCEMENT_TIMES=17:00
+    JELLYFIN_SCHEDULE_TIMEZONE=America/Los_Angeles
 
 See Also:
     - config.json.example: Full example with all options
@@ -72,36 +86,16 @@ class DiscordConfig:
 
 
 @dataclass
-class JellyfinConfig:
+class JellyfinScheduleConfig:
     """
-    Jellyfin server configuration settings.
-
-    Attributes:
-        url: Base URL of the Jellyfin server (e.g., "http://localhost:8096").
-            Trailing slashes are automatically removed.
-        api_key: Jellyfin API key for authentication.
-            Generate this in Jellyfin Dashboard → API Keys.
-    """
-
-    url: str
-    api_key: str
-
-    def __post_init__(self) -> None:
-        """Normalize the URL by removing trailing slashes."""
-        self.url = self.url.rstrip("/")
-
-
-@dataclass
-class ScheduleConfig:
-    """
-    Scheduling configuration for announcements, suggestions, and health checks.
+    Scheduling configuration for Jellyfin-specific tasks.
 
     Attributes:
         announcement_times: List of times to announce new content in HH:MM format
             (24-hour). Example: ["09:00", "17:00", "21:00"]
         suggestion_times: List of times to post random suggestions in HH:MM format
             (24-hour). Example: ["12:00", "20:00"]
-        timezone: IANA timezone name for interpreting announcement times.
+        timezone: IANA timezone name for interpreting times.
             Example: "America/Los_Angeles", "Europe/London", "UTC"
         health_check_interval_minutes: How often to check if Jellyfin is online.
             Lower values detect outages faster but increase API calls.
@@ -120,6 +114,35 @@ class ScheduleConfig:
 
 
 @dataclass
+class JellyfinConfig:
+    """
+    Jellyfin server configuration settings.
+
+    Attributes:
+        enabled: Whether Jellyfin integration is enabled.
+        url: Base URL of the Jellyfin server (e.g., "http://localhost:8096").
+            Trailing slashes are automatically removed.
+        api_key: Jellyfin API key for authentication.
+            Generate this in Jellyfin Dashboard → API Keys.
+        content_types: List of Jellyfin content types to announce.
+            Valid values: "Movie", "Series", "Audio", "Episode"
+        schedule: Scheduling settings for Jellyfin-specific tasks.
+    """
+
+    enabled: bool
+    url: str
+    api_key: str
+    content_types: list[str] = field(
+        default_factory=lambda: ["Movie", "Series", "Audio"]
+    )
+    schedule: JellyfinScheduleConfig = field(default_factory=JellyfinScheduleConfig)
+
+    def __post_init__(self) -> None:
+        """Normalize the URL by removing trailing slashes."""
+        self.url = self.url.rstrip("/")
+
+
+@dataclass
 class Config:
     """
     Main configuration container aggregating all settings.
@@ -129,25 +152,20 @@ class Config:
 
     Attributes:
         discord: Discord bot and channel settings.
-        jellyfin: Jellyfin server connection settings.
-        schedule: Timing settings for announcements and health checks.
-        content_types: List of Jellyfin content types to announce.
-            Valid values: "Movie", "Series", "Audio", "Episode"
+        jellyfin: Jellyfin server connection and schedule settings.
 
     Example:
         >>> config = load_config(Path("config.json"))
         >>> print(config.jellyfin.url)
         'http://localhost:8096'
-        >>> print(config.schedule.announcement_times)
+        >>> print(config.jellyfin.schedule.announcement_times)
         ['17:00']
+        >>> print(config.jellyfin.content_types)
+        ['Movie', 'Series', 'Audio']
     """
 
     discord: DiscordConfig
     jellyfin: JellyfinConfig
-    schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
-    content_types: list[str] = field(
-        default_factory=lambda: ["Movie", "Series", "Audio"]
-    )
 
 
 # =============================================================================
@@ -189,6 +207,24 @@ def _get_env(key: str, default: Optional[str] = None) -> Optional[str]:
         The environment variable value, or default if not set.
     """
     return os.environ.get(key, default)
+
+
+def _get_env_bool(key: str, default: Optional[bool] = None) -> Optional[bool]:
+    """
+    Get an environment variable as a boolean.
+
+    Args:
+        key: Environment variable name.
+        default: Value to return if the variable is not set.
+
+    Returns:
+        The environment variable value as a boolean, or default if not set.
+        Recognizes "true", "1", "yes" as True (case-insensitive).
+    """
+    value = os.environ.get(key)
+    if value is None:
+        return default
+    return value.lower() in ("true", "1", "yes")
 
 
 def _get_env_int(key: str, default: Optional[int] = None) -> Optional[int]:
@@ -325,6 +361,63 @@ def _build_discord_config(json_config: dict[str, Any]) -> DiscordConfig:
     )
 
 
+def _build_jellyfin_schedule_config(
+    schedule_json: dict[str, Any],
+) -> JellyfinScheduleConfig:
+    """
+    Build Jellyfin schedule configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+    All schedule settings have sensible defaults.
+
+    Args:
+        schedule_json: Parsed JSON schedule configuration dictionary.
+
+    Returns:
+        Populated JellyfinScheduleConfig object.
+
+    Environment Variables:
+        - JELLYFIN_SCHEDULE_ANNOUNCEMENT_TIMES: Comma-separated times
+        - JELLYFIN_SCHEDULE_SUGGESTION_TIMES: Comma-separated times
+        - JELLYFIN_SCHEDULE_TIMEZONE: IANA timezone name
+        - JELLYFIN_SCHEDULE_HEALTH_CHECK_INTERVAL: Minutes between health checks
+        - JELLYFIN_SCHEDULE_LOOKBACK_HOURS: Hours to look back for new content
+        - JELLYFIN_SCHEDULE_MAX_ITEMS_PER_TYPE: Max items per content type
+    """
+    announcement_times = _get_env_list(
+        "JELLYFIN_SCHEDULE_ANNOUNCEMENT_TIMES"
+    ) or schedule_json.get("announcement_times", ["17:00"])
+
+    suggestion_times = _get_env_list(
+        "JELLYFIN_SCHEDULE_SUGGESTION_TIMES"
+    ) or schedule_json.get("suggestion_times", [])
+
+    timezone = _get_env("JELLYFIN_SCHEDULE_TIMEZONE") or schedule_json.get(
+        "timezone", "America/Los_Angeles"
+    )
+
+    health_check_interval = _get_env_int(
+        "JELLYFIN_SCHEDULE_HEALTH_CHECK_INTERVAL"
+    ) or schedule_json.get("health_check_interval_minutes", 5)
+
+    lookback_hours = _get_env_int(
+        "JELLYFIN_SCHEDULE_LOOKBACK_HOURS"
+    ) or schedule_json.get("lookback_hours", 24)
+
+    max_items_per_type = _get_env_int(
+        "JELLYFIN_SCHEDULE_MAX_ITEMS_PER_TYPE"
+    ) or schedule_json.get("max_items_per_type", 10)
+
+    return JellyfinScheduleConfig(
+        announcement_times=announcement_times,
+        suggestion_times=suggestion_times,
+        timezone=timezone,
+        health_check_interval_minutes=health_check_interval,
+        lookback_hours=lookback_hours,
+        max_items_per_type=max_items_per_type,
+    )
+
+
 def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
     """
     Build Jellyfin configuration from JSON and environment variables.
@@ -338,87 +431,54 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
         Populated JellyfinConfig object.
 
     Raises:
-        ConfigurationError: If required values (url, api_key) are not
-            provided in either source.
+        ConfigurationError: If Jellyfin is enabled but required values
+            (url, api_key) are not provided in either source.
 
     Environment Variables:
+        - JELLYFIN_ENABLED: Whether Jellyfin integration is enabled
         - JELLYFIN_URL: Server base URL
         - JELLYFIN_API_KEY: API key for authentication
+        - JELLYFIN_CONTENT_TYPES: Comma-separated content types
     """
     jellyfin_json = json_config.get("jellyfin", {})
 
-    # URL is required
+    # Check if enabled (defaults to True for backward compatibility)
+    enabled_env = _get_env_bool("JELLYFIN_ENABLED")
+    enabled = (
+        enabled_env if enabled_env is not None else jellyfin_json.get("enabled", True)
+    )
+
+    # URL is required if enabled
     url = _get_env("JELLYFIN_URL") or jellyfin_json.get("url")
-    if not url:
+    if enabled and not url:
         raise ConfigurationError(
             "Jellyfin URL is required. Set JELLYFIN_URL environment variable "
             "or 'jellyfin.url' in config.json"
         )
 
-    # API key is required
+    # API key is required if enabled
     api_key = _get_env("JELLYFIN_API_KEY") or jellyfin_json.get("api_key")
-    if not api_key:
+    if enabled and not api_key:
         raise ConfigurationError(
             "Jellyfin API key is required. Set JELLYFIN_API_KEY environment "
             "variable or 'jellyfin.api_key' in config.json"
         )
 
-    return JellyfinConfig(url=url, api_key=api_key)
-
-
-def _build_schedule_config(json_config: dict[str, Any]) -> ScheduleConfig:
-    """
-    Build schedule configuration from JSON and environment variables.
-
-    Environment variables take precedence over JSON values.
-    All schedule settings have sensible defaults.
-
-    Args:
-        json_config: Parsed JSON configuration dictionary.
-
-    Returns:
-        Populated ScheduleConfig object.
-
-    Environment Variables:
-        - SCHEDULE_ANNOUNCEMENT_TIMES: Comma-separated times (e.g., "09:00,17:00")
-        - SCHEDULE_SUGGESTION_TIMES: Comma-separated times (e.g., "12:00,20:00")
-        - SCHEDULE_TIMEZONE: IANA timezone name
-        - SCHEDULE_HEALTH_CHECK_INTERVAL: Minutes between health checks
-        - SCHEDULE_LOOKBACK_HOURS: Hours to look back for new content
-    """
-    schedule_json = json_config.get("schedule", {})
-
-    announcement_times = _get_env_list(
-        "SCHEDULE_ANNOUNCEMENT_TIMES"
-    ) or schedule_json.get("announcement_times", ["17:00"])
-
-    suggestion_times = _get_env_list(
-        "SCHEDULE_SUGGESTION_TIMES"
-    ) or schedule_json.get("suggestion_times", [])
-
-    timezone = _get_env("SCHEDULE_TIMEZONE") or schedule_json.get(
-        "timezone", "America/Los_Angeles"
+    # Content types with env var override
+    content_types = _get_env_list("JELLYFIN_CONTENT_TYPES") or jellyfin_json.get(
+        "content_types", ["Movie", "Series", "Audio"]
     )
 
-    health_check_interval = _get_env_int(
-        "SCHEDULE_HEALTH_CHECK_INTERVAL"
-    ) or schedule_json.get("health_check_interval_minutes", 5)
+    # Build nested schedule config
+    schedule_json = jellyfin_json.get("schedule", {})
+    schedule_config = _build_jellyfin_schedule_config(schedule_json)
 
-    lookback_hours = _get_env_int("SCHEDULE_LOOKBACK_HOURS") or schedule_json.get(
-        "lookback_hours", 24
-    )
-
-    max_items_per_type = _get_env_int(
-        "SCHEDULE_MAX_ITEMS_PER_TYPE"
-    ) or schedule_json.get("max_items_per_type", 10)
-
-    return ScheduleConfig(
-        announcement_times=announcement_times,
-        suggestion_times=suggestion_times,
-        timezone=timezone,
-        health_check_interval_minutes=health_check_interval,
-        lookback_hours=lookback_hours,
-        max_items_per_type=max_items_per_type,
+    return JellyfinConfig(
+        enabled=enabled,
+        url=url or "",
+        api_key=api_key or "",
+        content_types=content_types,
+        schedule=schedule_config,
     )
 
 
@@ -458,7 +518,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         >>> # Access configuration values
         >>> print(config.discord.token)
         >>> print(config.jellyfin.url)
-        >>> print(config.schedule.announcement_times)
+        >>> print(config.jellyfin.schedule.announcement_times)
+        >>> print(config.jellyfin.content_types)
     """
     if config_path is None:
         config_path = Path("config.json")
@@ -469,16 +530,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     # Build each configuration section
     discord_config = _build_discord_config(json_config)
     jellyfin_config = _build_jellyfin_config(json_config)
-    schedule_config = _build_schedule_config(json_config)
-
-    # Content types with env var override
-    content_types = _get_env_list("CONTENT_TYPES") or json_config.get(
-        "content_types", ["Movie", "Series", "Audio"]
-    )
 
     return Config(
         discord=discord_config,
         jellyfin=jellyfin_config,
-        schedule=schedule_config,
-        content_types=content_types,
     )

@@ -1,5 +1,4 @@
-"""
-Unit tests for bot/cogs/health.py - Health monitoring cog.
+"""Unit tests for bot/cogs/jellyfin/health.py - Jellyfin health monitoring cog.
 
 Tests cover:
     - Server status state transitions
@@ -26,11 +25,11 @@ from bot.services.jellyfin import (
 
 
 def create_health_cog(mock_bot: MagicMock) -> Any:
-    """Create a HealthCog with mocked dependencies."""
-    with patch("bot.cogs.health.create_scheduler"):
-        from bot.cogs.health import HealthCog
+    """Create a JellyfinHealthCog with mocked dependencies."""
+    with patch("bot.cogs.jellyfin.health.create_scheduler"):
+        from bot.cogs.jellyfin.health import JellyfinHealthCog
 
-        cog = HealthCog(mock_bot)
+        cog = JellyfinHealthCog(mock_bot)
         # Create a mock jellyfin client
         cog.jellyfin = MagicMock()
         cog.jellyfin.check_health = AsyncMock()

@@ -120,7 +120,7 @@ class TestCreateScheduler:
     def mock_config(self) -> MagicMock:
         """Create a mock config object."""
         config = MagicMock()
-        config.schedule.timezone = "America/Los_Angeles"
+        config.jellyfin.schedule.timezone = "America/Los_Angeles"
         return config
 
     def test_creates_asyncio_scheduler(self, mock_config: MagicMock) -> None:
@@ -136,13 +136,13 @@ class TestCreateScheduler:
 
     def test_scheduler_uses_utc_timezone(self, mock_config: MagicMock) -> None:
         """Test scheduler with UTC timezone."""
-        mock_config.schedule.timezone = "UTC"
+        mock_config.jellyfin.schedule.timezone = "UTC"
         scheduler = create_scheduler(mock_config)
         assert str(scheduler.timezone) == "UTC"
 
     def test_scheduler_uses_different_timezone(self, mock_config: MagicMock) -> None:
         """Test scheduler with different timezone."""
-        mock_config.schedule.timezone = "Europe/London"
+        mock_config.jellyfin.schedule.timezone = "Europe/London"
         scheduler = create_scheduler(mock_config)
         assert str(scheduler.timezone) == "Europe/London"
 
@@ -180,7 +180,7 @@ class TestSchedulerIntegration:
     def mock_config(self) -> MagicMock:
         """Create a mock config object."""
         config = MagicMock()
-        config.schedule.timezone = "UTC"
+        config.jellyfin.schedule.timezone = "UTC"
         return config
 
     def test_can_add_job_after_creation(self, mock_config: MagicMock) -> None:

@@ -1,5 +1,5 @@
 """
-Health monitoring cog for Jellyfin server status.
+Jellyfin health monitoring cog for server status.
 
 This cog provides continuous monitoring of the Jellyfin server's availability,
 sending Discord notifications when the server goes offline or comes back online.
@@ -28,7 +28,7 @@ State Machine:
     ```
 
 Configuration:
-    Uses these settings from bot.config.schedule:
+    Uses these settings from bot.config.jellyfin.schedule:
         - health_check_interval_minutes: How often to check (default: 5)
 
     And from bot.config.discord:
@@ -40,7 +40,7 @@ Example Notifications:
 
 See Also:
     - bot.services.jellyfin: The API client used for health checks
-    - bot.cogs.announcements: Companion cog for content announcements
+    - bot.cogs.jellyfin.announcements: Companion cog for content announcements
 """
 
 import logging
@@ -63,10 +63,10 @@ if TYPE_CHECKING:
     from bot.main import MonolithBot
 
 # Module logger
-logger = logging.getLogger("monolithbot.health")
+logger = logging.getLogger("monolithbot.jellyfin.health")
 
 
-class HealthCog(commands.Cog, name="Health"):
+class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
     """
     Discord cog for monitoring Jellyfin server health.
 
@@ -89,7 +89,7 @@ class HealthCog(commands.Cog, name="Health"):
         The cog is automatically loaded by the bot. To manually interact:
 
         >>> # Cog is loaded automatically, but can be accessed via:
-        >>> health_cog = bot.get_cog("Health")
+        >>> health_cog = bot.get_cog("JellyfinHealth")
     """
 
     def __init__(self, bot: "MonolithBot") -> None:
@@ -137,17 +137,17 @@ class HealthCog(commands.Cog, name="Health"):
         await self._initial_health_check()
 
         # Schedule periodic health checks
-        interval_minutes = self.bot.config.schedule.health_check_interval_minutes
+        interval_minutes = self.bot.config.jellyfin.schedule.health_check_interval_minutes
         self.scheduler.add_job(
             self._run_health_check,
             trigger=IntervalTrigger(minutes=interval_minutes),
-            id="health_check",
+            id="jellyfin_health_check",
             replace_existing=True,
         )
 
         self.scheduler.start()
         logger.info(
-            f"Health monitoring started (checking every {interval_minutes} minutes)"
+            f"Jellyfin health monitoring started (checking every {interval_minutes} minutes)"
         )
 
     async def cog_unload(self) -> None:
@@ -160,7 +160,7 @@ class HealthCog(commands.Cog, name="Health"):
         self.scheduler.shutdown(wait=False)
         if self.jellyfin:
             await self.jellyfin.close()
-        logger.info("Health monitoring cog unloaded")
+        logger.info("Jellyfin health monitoring cog unloaded")
 
     # -------------------------------------------------------------------------
     # Health Check Logic
@@ -202,7 +202,7 @@ class HealthCog(commands.Cog, name="Health"):
             - online → online: No notification (silent success)
             - offline → offline: No notification (still down)
         """
-        logger.debug("Running health check...")
+        logger.debug("Running Jellyfin health check...")
 
         try:
             server_info = await self.jellyfin.check_health()
@@ -429,4 +429,4 @@ async def setup(bot: "MonolithBot") -> None:
     Args:
         bot: The MonolithBot instance to add the cog to.
     """
-    await bot.add_cog(HealthCog(bot))
+    await bot.add_cog(JellyfinHealthCog(bot))

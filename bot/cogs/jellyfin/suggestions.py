@@ -1,5 +1,5 @@
 """
-Suggestions cog for random Jellyfin content recommendations.
+Jellyfin suggestions cog for random content recommendations.
 
 This cog handles automatic posting of random content suggestions
 to a Discord channel at configured times. It helps users discover
@@ -9,7 +9,7 @@ Key Features:
     - Scheduled suggestions at configurable times (cron-based)
     - Random selection of movies, TV shows, and music albums
     - Rich Discord embeds with cover art and direct links
-    - Manual suggestion trigger for administrators
+    - Manual suggestion trigger via slash command
 
 Suggestion Structure:
     When triggered, suggestions are formatted as:
@@ -49,14 +49,14 @@ Slash Commands:
 
 Configuration:
     Uses these settings from bot.config:
-        - schedule.suggestion_times: List of times like ["12:00", "20:00"]
-        - schedule.timezone: IANA timezone for interpreting times
+        - jellyfin.schedule.suggestion_times: List of times like ["12:00", "20:00"]
+        - jellyfin.schedule.timezone: IANA timezone for interpreting times
         - discord.announcement_channel_id: Where to post suggestions
 
 See Also:
     - bot.services.jellyfin: API client for fetching content
     - bot.services.scheduler: Scheduler factory and time parsing
-    - bot.cogs.announcements: Similar cog for new content announcements
+    - bot.cogs.jellyfin.announcements: Similar cog for new content announcements
 """
 
 import logging
@@ -75,7 +75,7 @@ if TYPE_CHECKING:
     from bot.main import MonolithBot
 
 # Module logger
-logger = logging.getLogger("monolithbot.suggestions")
+logger = logging.getLogger("monolithbot.jellyfin.suggestions")
 
 
 # =============================================================================
@@ -127,9 +127,9 @@ SUGGESTION_CONFIG = {
 MAX_DESCRIPTION_LENGTH = 300
 
 
-class SuggestionsCog(commands.Cog, name="Suggestions"):
+class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
     """
-    Discord cog for random content suggestions.
+    Discord cog for random Jellyfin content suggestions.
 
     This cog queries the Jellyfin server for random content
     and posts suggestions to Discord at configured times.
@@ -142,7 +142,7 @@ class SuggestionsCog(commands.Cog, name="Suggestions"):
     Example:
         The cog is automatically loaded. Commands available:
 
-        >>> /suggest  # Manually trigger suggestions (admin only)
+        >>> /suggest  # Get random suggestions
     """
 
     def __init__(self, bot: "MonolithBot") -> None:
@@ -181,7 +181,7 @@ class SuggestionsCog(commands.Cog, name="Suggestions"):
         # Schedule suggestions for each configured time
         self._schedule_suggestions()
         self.scheduler.start()
-        logger.info("Suggestions cog loaded and scheduler started")
+        logger.info("Jellyfin suggestions cog loaded and scheduler started")
 
     async def cog_unload(self) -> None:
         """
@@ -193,7 +193,7 @@ class SuggestionsCog(commands.Cog, name="Suggestions"):
         self.scheduler.shutdown(wait=False)
         if self.jellyfin:
             await self.jellyfin.close()
-        logger.info("Suggestions cog unloaded")
+        logger.info("Jellyfin suggestions cog unloaded")
 
     # -------------------------------------------------------------------------
     # Scheduling
@@ -204,10 +204,10 @@ class SuggestionsCog(commands.Cog, name="Suggestions"):
         Schedule suggestion jobs based on configuration.
 
         Creates a cron-triggered job for each time in the
-        `config.schedule.suggestion_times` list. Invalid times
+        `config.jellyfin.schedule.suggestion_times` list. Invalid times
         are logged and skipped.
         """
-        for time_str in self.bot.config.schedule.suggestion_times:
+        for time_str in self.bot.config.jellyfin.schedule.suggestion_times:
             try:
                 hour, minute = parse_time(time_str)
                 trigger = CronTrigger(hour=hour, minute=minute)
@@ -215,13 +215,13 @@ class SuggestionsCog(commands.Cog, name="Suggestions"):
                 self.scheduler.add_job(
                     self._run_suggestion,
                     trigger=trigger,
-                    id=f"suggestion_{time_str}",
+                    id=f"jellyfin_suggestion_{time_str}",
                     replace_existing=True,
                 )
 
                 logger.info(
-                    f"Scheduled suggestion at {time_str} "
-                    f"({self.bot.config.schedule.timezone})"
+                    f"Scheduled Jellyfin suggestion at {time_str} "
+                    f"({self.bot.config.jellyfin.schedule.timezone})"
                 )
 
             except ValueError as e:
@@ -235,7 +235,7 @@ class SuggestionsCog(commands.Cog, name="Suggestions"):
         Wraps `post_random_suggestions()` with exception handling to prevent
         scheduler job failures from stopping future executions.
         """
-        logger.info("Running scheduled suggestion...")
+        logger.info("Running scheduled Jellyfin suggestion...")
 
         try:
             count = await self.post_random_suggestions()
@@ -492,4 +492,4 @@ async def setup(bot: "MonolithBot") -> None:
     Args:
         bot: The MonolithBot instance to add the cog to.
     """
-    await bot.add_cog(SuggestionsCog(bot))
+    await bot.add_cog(JellyfinSuggestionsCog(bot))

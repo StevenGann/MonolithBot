@@ -21,15 +21,16 @@ from bot.config import (
     ConfigurationError,
     DiscordConfig,
     JellyfinConfig,
-    ScheduleConfig,
+    JellyfinScheduleConfig,
     load_config,
     _get_env,
+    _get_env_bool,
     _get_env_int,
     _get_env_list,
     _load_json_config,
     _build_discord_config,
     _build_jellyfin_config,
-    _build_schedule_config,
+    _build_jellyfin_schedule_config,
 )
 
 
@@ -62,21 +63,56 @@ class TestDiscordConfig:
         assert config.alert_channel_id == 987654321
 
 
+class TestJellyfinScheduleConfig:
+    """Tests for JellyfinScheduleConfig dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test default values for schedule config."""
+        config = JellyfinScheduleConfig()
+        assert config.announcement_times == ["17:00"]
+        assert config.suggestion_times == []
+        assert config.timezone == "America/Los_Angeles"
+        assert config.health_check_interval_minutes == 5
+        assert config.lookback_hours == 24
+        assert config.max_items_per_type == 10
+
+    def test_custom_values(self) -> None:
+        """Test custom values for schedule config."""
+        config = JellyfinScheduleConfig(
+            announcement_times=["09:00", "21:00"],
+            suggestion_times=["12:00", "18:00"],
+            timezone="UTC",
+            health_check_interval_minutes=10,
+            lookback_hours=48,
+            max_items_per_type=5,
+        )
+        assert config.announcement_times == ["09:00", "21:00"]
+        assert config.suggestion_times == ["12:00", "18:00"]
+        assert config.timezone == "UTC"
+        assert config.health_check_interval_minutes == 10
+        assert config.lookback_hours == 48
+        assert config.max_items_per_type == 5
+
+
 class TestJellyfinConfig:
     """Tests for JellyfinConfig dataclass."""
 
     def test_basic_creation(self) -> None:
         """Test creating JellyfinConfig with required fields."""
         config = JellyfinConfig(
+            enabled=True,
             url="http://localhost:8096",
             api_key="test-api-key",
         )
+        assert config.enabled is True
         assert config.url == "http://localhost:8096"
         assert config.api_key == "test-api-key"
+        assert config.content_types == ["Movie", "Series", "Audio"]
 
     def test_trailing_slash_removed(self) -> None:
         """Test that trailing slashes are removed from URL."""
         config = JellyfinConfig(
+            enabled=True,
             url="http://localhost:8096/",
             api_key="test-api-key",
         )
@@ -85,38 +121,30 @@ class TestJellyfinConfig:
     def test_multiple_trailing_slashes_removed(self) -> None:
         """Test that multiple trailing slashes are removed."""
         config = JellyfinConfig(
+            enabled=True,
             url="http://localhost:8096///",
             api_key="test-api-key",
         )
         assert config.url == "http://localhost:8096"
 
-
-class TestScheduleConfig:
-    """Tests for ScheduleConfig dataclass."""
-
-    def test_default_values(self) -> None:
-        """Test default values for schedule config."""
-        config = ScheduleConfig()
-        assert config.announcement_times == ["17:00"]
-        assert config.timezone == "America/Los_Angeles"
-        assert config.health_check_interval_minutes == 5
-        assert config.lookback_hours == 24
-        assert config.max_items_per_type == 10
-
-    def test_custom_values(self) -> None:
-        """Test custom values for schedule config."""
-        config = ScheduleConfig(
-            announcement_times=["09:00", "21:00"],
-            timezone="UTC",
-            health_check_interval_minutes=10,
-            lookback_hours=48,
-            max_items_per_type=5,
+    def test_default_schedule(self) -> None:
+        """Test that default schedule is created."""
+        config = JellyfinConfig(
+            enabled=True,
+            url="http://localhost:8096",
+            api_key="test-api-key",
         )
-        assert config.announcement_times == ["09:00", "21:00"]
-        assert config.timezone == "UTC"
-        assert config.health_check_interval_minutes == 10
-        assert config.lookback_hours == 48
-        assert config.max_items_per_type == 5
+        assert config.schedule.announcement_times == ["17:00"]
+        assert config.schedule.timezone == "America/Los_Angeles"
+
+    def test_disabled_config(self) -> None:
+        """Test creating disabled JellyfinConfig."""
+        config = JellyfinConfig(
+            enabled=False,
+            url="",
+            api_key="",
+        )
+        assert config.enabled is False
 
 
 # =============================================================================
@@ -137,6 +165,25 @@ class TestEnvHelpers:
         with patch.dict(os.environ, {}, clear=True):
             assert _get_env("NONEXISTENT_VAR") is None
             assert _get_env("NONEXISTENT_VAR", "default") == "default"
+
+    def test_get_env_bool_returns_true(self) -> None:
+        """Test _get_env_bool parses true values."""
+        for val in ["true", "True", "TRUE", "1", "yes", "YES"]:
+            with patch.dict(os.environ, {"TEST_BOOL": val}):
+                assert _get_env_bool("TEST_BOOL") is True
+
+    def test_get_env_bool_returns_false(self) -> None:
+        """Test _get_env_bool parses false values."""
+        for val in ["false", "False", "FALSE", "0", "no", "NO", "anything"]:
+            with patch.dict(os.environ, {"TEST_BOOL": val}):
+                assert _get_env_bool("TEST_BOOL") is False
+
+    def test_get_env_bool_returns_default(self) -> None:
+        """Test _get_env_bool returns default when var not set."""
+        with patch.dict(os.environ, {}, clear=True):
+            assert _get_env_bool("NONEXISTENT_VAR") is None
+            assert _get_env_bool("NONEXISTENT_VAR", True) is True
+            assert _get_env_bool("NONEXISTENT_VAR", False) is False
 
     def test_get_env_int_returns_int(self) -> None:
         """Test _get_env_int parses integer values."""
@@ -269,6 +316,52 @@ class TestBuildDiscordConfig:
             assert "announcement channel ID is required" in str(exc_info.value)
 
 
+class TestBuildJellyfinScheduleConfig:
+    """Tests for _build_jellyfin_schedule_config function."""
+
+    def test_uses_defaults(self) -> None:
+        """Test using default values when nothing is configured."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = _build_jellyfin_schedule_config({})
+        assert config.announcement_times == ["17:00"]
+        assert config.suggestion_times == []
+        assert config.timezone == "America/Los_Angeles"
+        assert config.health_check_interval_minutes == 5
+        assert config.lookback_hours == 24
+
+    def test_loads_from_json(self) -> None:
+        """Test loading schedule config from JSON."""
+        schedule_json = {
+            "announcement_times": ["09:00", "21:00"],
+            "suggestion_times": ["12:00", "18:00"],
+            "timezone": "UTC",
+            "health_check_interval_minutes": 10,
+            "lookback_hours": 48,
+        }
+        with patch.dict(os.environ, {}, clear=True):
+            config = _build_jellyfin_schedule_config(schedule_json)
+        assert config.announcement_times == ["09:00", "21:00"]
+        assert config.suggestion_times == ["12:00", "18:00"]
+        assert config.timezone == "UTC"
+        assert config.health_check_interval_minutes == 10
+        assert config.lookback_hours == 48
+
+    def test_env_overrides_json(self) -> None:
+        """Test environment variables override JSON values."""
+        schedule_json = {
+            "announcement_times": ["12:00"],
+            "timezone": "UTC",
+        }
+        env_vars = {
+            "JELLYFIN_SCHEDULE_ANNOUNCEMENT_TIMES": "06:00,18:00",
+            "JELLYFIN_SCHEDULE_TIMEZONE": "Europe/London",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = _build_jellyfin_schedule_config(schedule_json)
+        assert config.announcement_times == ["06:00", "18:00"]
+        assert config.timezone == "Europe/London"
+
+
 class TestBuildJellyfinConfig:
     """Tests for _build_jellyfin_config function."""
 
@@ -276,19 +369,28 @@ class TestBuildJellyfinConfig:
         """Test loading Jellyfin config from JSON."""
         json_config = {
             "jellyfin": {
+                "enabled": True,
                 "url": "http://test:8096",
                 "api_key": "test-key",
+                "content_types": ["Movie", "Series"],
+                "schedule": {
+                    "announcement_times": ["12:00"],
+                },
             }
         }
         with patch.dict(os.environ, {}, clear=True):
             config = _build_jellyfin_config(json_config)
+        assert config.enabled is True
         assert config.url == "http://test:8096"
         assert config.api_key == "test-key"
+        assert config.content_types == ["Movie", "Series"]
+        assert config.schedule.announcement_times == ["12:00"]
 
     def test_env_overrides_json(self) -> None:
         """Test environment variables override JSON values."""
         json_config = {
             "jellyfin": {
+                "enabled": True,
                 "url": "http://json:8096",
                 "api_key": "json-key",
             }
@@ -302,67 +404,55 @@ class TestBuildJellyfinConfig:
         assert config.url == "http://env:8096"
         assert config.api_key == "env-key"
 
-    def test_raises_on_missing_url(self) -> None:
-        """Test raising error when URL is missing."""
+    def test_enabled_defaults_to_true(self) -> None:
+        """Test that enabled defaults to True for backward compatibility."""
+        json_config = {
+            "jellyfin": {
+                "url": "http://test:8096",
+                "api_key": "test-key",
+            }
+        }
+        with patch.dict(os.environ, {}, clear=True):
+            config = _build_jellyfin_config(json_config)
+        assert config.enabled is True
+
+    def test_disabled_jellyfin_no_url_required(self) -> None:
+        """Test that URL/API key not required when disabled."""
+        json_config = {
+            "jellyfin": {
+                "enabled": False,
+            }
+        }
+        with patch.dict(os.environ, {}, clear=True):
+            config = _build_jellyfin_config(json_config)
+        assert config.enabled is False
+        assert config.url == ""
+        assert config.api_key == ""
+
+    def test_raises_on_missing_url_when_enabled(self) -> None:
+        """Test raising error when URL is missing and enabled."""
+        json_config = {
+            "jellyfin": {
+                "enabled": True,
+            }
+        }
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ConfigurationError) as exc_info:
-                _build_jellyfin_config({})
+                _build_jellyfin_config(json_config)
             assert "Jellyfin URL is required" in str(exc_info.value)
 
-    def test_raises_on_missing_api_key(self) -> None:
-        """Test raising error when API key is missing."""
-        json_config = {"jellyfin": {"url": "http://test:8096"}}
+    def test_raises_on_missing_api_key_when_enabled(self) -> None:
+        """Test raising error when API key is missing and enabled."""
+        json_config = {
+            "jellyfin": {
+                "enabled": True,
+                "url": "http://test:8096",
+            }
+        }
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ConfigurationError) as exc_info:
                 _build_jellyfin_config(json_config)
             assert "Jellyfin API key is required" in str(exc_info.value)
-
-
-class TestBuildScheduleConfig:
-    """Tests for _build_schedule_config function."""
-
-    def test_uses_defaults(self) -> None:
-        """Test using default values when nothing is configured."""
-        with patch.dict(os.environ, {}, clear=True):
-            config = _build_schedule_config({})
-        assert config.announcement_times == ["17:00"]
-        assert config.timezone == "America/Los_Angeles"
-        assert config.health_check_interval_minutes == 5
-        assert config.lookback_hours == 24
-
-    def test_loads_from_json(self) -> None:
-        """Test loading schedule config from JSON."""
-        json_config = {
-            "schedule": {
-                "announcement_times": ["09:00", "21:00"],
-                "timezone": "UTC",
-                "health_check_interval_minutes": 10,
-                "lookback_hours": 48,
-            }
-        }
-        with patch.dict(os.environ, {}, clear=True):
-            config = _build_schedule_config(json_config)
-        assert config.announcement_times == ["09:00", "21:00"]
-        assert config.timezone == "UTC"
-        assert config.health_check_interval_minutes == 10
-        assert config.lookback_hours == 48
-
-    def test_env_overrides_json(self) -> None:
-        """Test environment variables override JSON values."""
-        json_config = {
-            "schedule": {
-                "announcement_times": ["12:00"],
-                "timezone": "UTC",
-            }
-        }
-        env_vars = {
-            "SCHEDULE_ANNOUNCEMENT_TIMES": "06:00,18:00",
-            "SCHEDULE_TIMEZONE": "Europe/London",
-        }
-        with patch.dict(os.environ, env_vars, clear=True):
-            config = _build_schedule_config(json_config)
-        assert config.announcement_times == ["06:00", "18:00"]
-        assert config.timezone == "Europe/London"
 
 
 # =============================================================================
@@ -385,13 +475,14 @@ class TestLoadConfig:
             config.discord.announcement_channel_id
             == config_json["discord"]["announcement_channel_id"]
         )
+        assert config.jellyfin.enabled == config_json["jellyfin"]["enabled"]
         assert config.jellyfin.url == config_json["jellyfin"]["url"]
         assert config.jellyfin.api_key == config_json["jellyfin"]["api_key"]
+        assert config.jellyfin.content_types == config_json["jellyfin"]["content_types"]
         assert (
-            config.schedule.announcement_times
-            == config_json["schedule"]["announcement_times"]
+            config.jellyfin.schedule.announcement_times
+            == config_json["jellyfin"]["schedule"]["announcement_times"]
         )
-        assert config.content_types == config_json["content_types"]
 
     def test_loads_from_env_only(self, tmp_path: Path) -> None:
         """Test loading configuration from environment variables only."""
@@ -425,3 +516,17 @@ class TestLoadConfig:
             # because env vars provide all required values
             config = load_config()
             assert config.discord.token == "test-token"
+
+    def test_jellyfin_disabled_via_env(self, tmp_path: Path) -> None:
+        """Test disabling Jellyfin via environment variable."""
+        env_vars = {
+            "DISCORD_TOKEN": "test-token",
+            "DISCORD_ANNOUNCEMENT_CHANNEL_ID": "123",
+            "JELLYFIN_ENABLED": "false",
+        }
+        config_path = tmp_path / "nonexistent.json"
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = load_config(config_path)
+
+        assert config.jellyfin.enabled is False

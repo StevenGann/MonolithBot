@@ -17,8 +17,9 @@ Usage:
 
 See Also:
     - bot.config: Configuration loading and validation
-    - bot.cogs.announcements: Scheduled content announcements
-    - bot.cogs.health: Server health monitoring
+    - bot.cogs.jellyfin.announcements: Scheduled content announcements
+    - bot.cogs.jellyfin.health: Server health monitoring
+    - bot.cogs.jellyfin.suggestions: Random content suggestions
 """
 
 import argparse
@@ -141,12 +142,18 @@ class MonolithBot(commands.Bot):
         logger.info("Loading cogs...")
 
         # List of cog modules to load
-        # Add new cogs here as "bot.cogs.<name>"
-        cogs_to_load = [
-            "bot.cogs.announcements",
-            "bot.cogs.health",
-            "bot.cogs.suggestions",
-        ]
+        # Jellyfin cogs are only loaded if Jellyfin is enabled
+        cogs_to_load = []
+
+        if self.config.jellyfin.enabled:
+            cogs_to_load.extend([
+                "bot.cogs.jellyfin.announcements",
+                "bot.cogs.jellyfin.health",
+                "bot.cogs.jellyfin.suggestions",
+            ])
+            logger.info("Jellyfin integration enabled - loading Jellyfin cogs")
+        else:
+            logger.info("Jellyfin integration disabled - skipping Jellyfin cogs")
 
         for cog in cogs_to_load:
             try:
@@ -230,23 +237,25 @@ class MonolithBot(commands.Bot):
 
         logger.info(f"=== TEST MODE: Running {', '.join(enabled_modes)} ===")
 
-        # Run health test if enabled
-        if self._test_modes.health:
-            await self._run_health_test()
+    # Run Jellyfin tests if enabled
+        if self.config.jellyfin.enabled:
+            if self._test_modes.health:
+                await self._run_health_test()
 
-        # Run announcement test if enabled
-        if self._test_modes.announcement:
-            await self._run_announcement_test()
+            if self._test_modes.announcement:
+                await self._run_announcement_test()
 
-        # Run suggestion test if enabled
-        if self._test_modes.suggestion:
-            await self._run_suggestion_test()
+            if self._test_modes.suggestion:
+                await self._run_suggestion_test()
+        else:
+            if self._test_modes.any_enabled:
+                logger.warning("Jellyfin is disabled - skipping Jellyfin test modes")
 
         logger.info("=== TEST MODE COMPLETE ===")
 
     async def _run_health_test(self) -> None:
         """Run health check test and send notification."""
-        health_cog = self.get_cog("Health")
+        health_cog = self.get_cog("JellyfinHealth")
         if health_cog:
             logger.info("TEST: Sending health status notification...")
             try:
@@ -257,11 +266,11 @@ class MonolithBot(commands.Bot):
             except Exception as e:
                 logger.error(f"TEST: Health notification failed: {e}")
         else:
-            logger.warning("TEST: Health cog not loaded")
+            logger.warning("TEST: JellyfinHealth cog not loaded")
 
     async def _run_announcement_test(self) -> None:
         """Run content announcement test."""
-        announcements_cog = self.get_cog("Announcements")
+        announcements_cog = self.get_cog("JellyfinAnnouncements")
         if announcements_cog:
             logger.info("TEST: Running content announcement...")
             try:
@@ -270,11 +279,11 @@ class MonolithBot(commands.Bot):
             except Exception as e:
                 logger.error(f"TEST: Announcement failed: {e}")
         else:
-            logger.warning("TEST: Announcements cog not loaded")
+            logger.warning("TEST: JellyfinAnnouncements cog not loaded")
 
     async def _run_suggestion_test(self) -> None:
         """Run random suggestion test."""
-        suggestions_cog = self.get_cog("Suggestions")
+        suggestions_cog = self.get_cog("JellyfinSuggestions")
         if suggestions_cog:
             logger.info("TEST: Running random suggestions...")
             try:
@@ -283,7 +292,7 @@ class MonolithBot(commands.Bot):
             except Exception as e:
                 logger.error(f"TEST: Suggestion failed: {e}")
         else:
-            logger.warning("TEST: Suggestions cog not loaded")
+            logger.warning("TEST: JellyfinSuggestions cog not loaded")
 
     async def shutdown(self) -> None:
         """
@@ -492,10 +501,13 @@ def main() -> NoReturn | None:
         sys.exit(1)
 
     # Log configuration summary (excluding sensitive values)
-    logger.info(f"Jellyfin URL: {config.jellyfin.url}")
-    logger.info(f"Announcement times: {', '.join(config.schedule.announcement_times)}")
-    logger.info(f"Timezone: {config.schedule.timezone}")
-    logger.info(f"Content types: {', '.join(config.content_types)}")
+    logger.info(f"Jellyfin enabled: {config.jellyfin.enabled}")
+    if config.jellyfin.enabled:
+        logger.info(f"Jellyfin URL: {config.jellyfin.url}")
+        logger.info(f"Announcement times: {', '.join(config.jellyfin.schedule.announcement_times)}")
+        logger.info(f"Suggestion times: {', '.join(config.jellyfin.schedule.suggestion_times)}")
+        logger.info(f"Timezone: {config.jellyfin.schedule.timezone}")
+        logger.info(f"Content types: {', '.join(config.jellyfin.content_types)}")
 
     # Build test modes from command-line arguments
     test_modes = build_test_modes(args)
@@ -505,6 +517,8 @@ def main() -> NoReturn | None:
             enabled.append("health")
         if test_modes.announcement:
             enabled.append("announcement")
+        if test_modes.suggestion:
+            enabled.append("suggestion")
         logger.info(f"Test modes enabled: {', '.join(enabled)}")
 
     # Run the bot

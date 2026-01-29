@@ -22,8 +22,8 @@ Example:
 
 See Also:
     - APScheduler documentation: https://apscheduler.readthedocs.io/
-    - bot.cogs.announcements: Uses CronTrigger for scheduled announcements
-    - bot.cogs.health: Uses IntervalTrigger for periodic health checks
+    - bot.cogs.jellyfin.announcements: Uses CronTrigger for scheduled announcements
+    - bot.cogs.jellyfin.health: Uses IntervalTrigger for periodic health checks
 """
 
 import logging
@@ -48,7 +48,7 @@ def create_scheduler(config: "Config") -> AsyncIOScheduler:
     a stopped state - the caller must call `scheduler.start()` when ready.
 
     Args:
-        config: Bot configuration object. Uses `config.schedule.timezone`
+        config: Bot configuration object. Uses `config.jellyfin.schedule.timezone`
             to set the scheduler's timezone for interpreting job times.
 
     Returns:
@@ -87,7 +87,7 @@ def create_scheduler(config: "Config") -> AsyncIOScheduler:
         affecting other cogs.
     """
     # Parse timezone string into pytz timezone object
-    timezone = pytz.timezone(config.schedule.timezone)
+    timezone = pytz.timezone(config.jellyfin.schedule.timezone)
 
     scheduler = AsyncIOScheduler(
         timezone=timezone,
@@ -98,7 +98,7 @@ def create_scheduler(config: "Config") -> AsyncIOScheduler:
         },
     )
 
-    logger.info(f"Created scheduler with timezone: {config.schedule.timezone}")
+    logger.info(f"Created scheduler with timezone: {config.jellyfin.schedule.timezone}")
     return scheduler
 
 

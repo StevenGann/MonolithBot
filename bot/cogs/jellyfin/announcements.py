@@ -1,5 +1,5 @@
 """
-Announcements cog for scheduled Jellyfin content notifications.
+Jellyfin announcements cog for scheduled content notifications.
 
 This cog handles automatic announcements of newly added media content
 to a Discord channel at configured times. It's the primary way users
@@ -47,16 +47,16 @@ Slash Commands:
 
 Configuration:
     Uses these settings from bot.config:
-        - schedule.announcement_times: List of times like ["17:00", "21:00"]
-        - schedule.timezone: IANA timezone for interpreting times
-        - schedule.lookback_hours: How far back to look for "new" content
-        - content_types: Which types to announce ["Movie", "Series", "Audio"]
+        - jellyfin.schedule.announcement_times: List of times like ["17:00", "21:00"]
+        - jellyfin.schedule.timezone: IANA timezone for interpreting times
+        - jellyfin.schedule.lookback_hours: How far back to look for "new" content
+        - jellyfin.content_types: Which types to announce ["Movie", "Series", "Audio"]
         - discord.announcement_channel_id: Where to post announcements
 
 See Also:
     - bot.services.jellyfin: API client for fetching content
     - bot.services.scheduler: Scheduler factory and time parsing
-    - bot.cogs.health: Companion cog for server health monitoring
+    - bot.cogs.jellyfin.health: Companion cog for server health monitoring
 """
 
 import logging
@@ -75,7 +75,7 @@ if TYPE_CHECKING:
     from bot.main import MonolithBot
 
 # Module logger
-logger = logging.getLogger("monolithbot.announcements")
+logger = logging.getLogger("monolithbot.jellyfin.announcements")
 
 
 # =============================================================================
@@ -104,9 +104,9 @@ CONTENT_TYPE_EMOJI: dict[str, str] = {
 MAX_DESCRIPTION_LENGTH = 300
 
 
-class AnnouncementsCog(commands.Cog, name="Announcements"):
+class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
     """
-    Discord cog for scheduled content announcements.
+    Discord cog for scheduled Jellyfin content announcements.
 
     This cog queries the Jellyfin server for recently added content
     and posts formatted announcements to Discord at configured times.
@@ -159,7 +159,7 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         # Schedule announcements for each configured time
         self._schedule_announcements()
         self.scheduler.start()
-        logger.info("Announcements cog loaded and scheduler started")
+        logger.info("Jellyfin announcements cog loaded and scheduler started")
 
     async def cog_unload(self) -> None:
         """
@@ -171,7 +171,7 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         self.scheduler.shutdown(wait=False)
         if self.jellyfin:
             await self.jellyfin.close()
-        logger.info("Announcements cog unloaded")
+        logger.info("Jellyfin announcements cog unloaded")
 
     # -------------------------------------------------------------------------
     # Scheduling
@@ -182,10 +182,10 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         Schedule announcement jobs based on configuration.
 
         Creates a cron-triggered job for each time in the
-        `config.schedule.announcement_times` list. Invalid times
+        `config.jellyfin.schedule.announcement_times` list. Invalid times
         are logged and skipped.
         """
-        for time_str in self.bot.config.schedule.announcement_times:
+        for time_str in self.bot.config.jellyfin.schedule.announcement_times:
             try:
                 hour, minute = parse_time(time_str)
                 trigger = CronTrigger(hour=hour, minute=minute)
@@ -193,13 +193,13 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
                 self.scheduler.add_job(
                     self._run_announcement,
                     trigger=trigger,
-                    id=f"announcement_{time_str}",
+                    id=f"jellyfin_announcement_{time_str}",
                     replace_existing=True,
                 )
 
                 logger.info(
-                    f"Scheduled announcement at {time_str} "
-                    f"({self.bot.config.schedule.timezone})"
+                    f"Scheduled Jellyfin announcement at {time_str} "
+                    f"({self.bot.config.jellyfin.schedule.timezone})"
                 )
 
             except ValueError as e:
@@ -213,7 +213,7 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         Wraps `announce_new_content()` with exception handling to prevent
         scheduler job failures from stopping future executions.
         """
-        logger.info("Running scheduled announcement...")
+        logger.info("Running scheduled Jellyfin announcement...")
 
         try:
             count = await self.announce_new_content()
@@ -265,8 +265,8 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         # Fetch recent items from Jellyfin
         try:
             items_by_type = await self.jellyfin.get_all_recent_items(
-                content_types=self.bot.config.content_types,
-                hours=self.bot.config.schedule.lookback_hours,
+                content_types=self.bot.config.jellyfin.content_types,
+                hours=self.bot.config.jellyfin.schedule.lookback_hours,
             )
         except JellyfinError as e:
             logger.error(f"Failed to fetch items from Jellyfin: {e}")
@@ -286,7 +286,7 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
             title="🆕 New Content on Monolith",
             description=(
                 f"Here's what's been added in the last "
-                f"{self.bot.config.schedule.lookback_hours} hours!"
+                f"{self.bot.config.jellyfin.schedule.lookback_hours} hours!"
             ),
             color=discord.Color.gold(),
             timestamp=datetime.now(timezone.utc),
@@ -314,7 +314,7 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         Send a section of announcements for a single content type.
 
         Sends a section header followed by individual item embeds.
-        Limits to config.schedule.max_items_per_type items with an overflow message.
+        Limits to config.jellyfin.schedule.max_items_per_type items with an overflow message.
 
         Args:
             channel: Discord channel to send to.
@@ -327,7 +327,7 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         color = CONTENT_TYPE_COLORS.get(content_type, discord.Color.greyple())
 
         # Get max items from config
-        max_items = self.bot.config.schedule.max_items_per_type
+        max_items = self.bot.config.jellyfin.schedule.max_items_per_type
 
         # Send section header with link to Recently Added page
         recently_added_url = self.jellyfin.get_recently_added_url(content_type)
@@ -546,7 +546,7 @@ class AnnouncementsCog(commands.Cog, name="Announcements"):
         # Find next scheduled announcement
         next_run = None
         for job in self.scheduler.get_jobs():
-            if job.id.startswith("announcement_"):
+            if job.id.startswith("jellyfin_announcement_"):
                 if next_run is None or job.next_run_time < next_run:
                     next_run = job.next_run_time
 
@@ -581,4 +581,4 @@ async def setup(bot: "MonolithBot") -> None:
     Args:
         bot: The MonolithBot instance to add the cog to.
     """
-    await bot.add_cog(AnnouncementsCog(bot))
+    await bot.add_cog(JellyfinAnnouncementsCog(bot))
