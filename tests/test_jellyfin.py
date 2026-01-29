@@ -876,3 +876,532 @@ class TestJellyfinClientSession:
         )
         # Should not raise
         await client.close()
+
+
+# =============================================================================
+# JellyfinService Tests
+# =============================================================================
+
+from bot.services.jellyfin import JellyfinService
+
+
+class TestJellyfinServiceInit:
+    """Tests for JellyfinService initialization."""
+
+    def test_basic_init(self) -> None:
+        """Test basic initialization with single URL."""
+        service = JellyfinService(
+            urls=["http://localhost:8096"],
+            api_key="test-key",
+        )
+        assert service.urls == ["http://localhost:8096"]
+        assert service.api_key == "test-key"
+        assert service._active_url is None
+        assert service._client is None
+
+    def test_multiple_urls(self) -> None:
+        """Test initialization with multiple URLs."""
+        service = JellyfinService(
+            urls=["http://primary:8096", "http://backup:8096"],
+            api_key="test-key",
+        )
+        assert len(service.urls) == 2
+        assert service.urls[0] == "http://primary:8096"
+        assert service.urls[1] == "http://backup:8096"
+
+    def test_trailing_slash_removed(self) -> None:
+        """Test that trailing slashes are removed from URLs."""
+        service = JellyfinService(
+            urls=["http://localhost:8096/", "http://backup:8096///"],
+            api_key="test-key",
+        )
+        assert service.urls[0] == "http://localhost:8096"
+        assert service.urls[1] == "http://backup:8096"
+
+    def test_active_url_property_none(self) -> None:
+        """Test active_url property returns None before resolution."""
+        service = JellyfinService(
+            urls=["http://localhost:8096"],
+            api_key="test-key",
+        )
+        assert service.active_url is None
+
+    def test_active_url_property_after_set(self) -> None:
+        """Test active_url property returns the cached URL."""
+        service = JellyfinService(
+            urls=["http://localhost:8096"],
+            api_key="test-key",
+        )
+        service._active_url = "http://localhost:8096"
+        assert service.active_url == "http://localhost:8096"
+
+
+class TestJellyfinServiceResolveUrl:
+    """Tests for JellyfinService.resolve_url() failover logic."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_single_url_success(self) -> None:
+        """Test resolving with a single working URL."""
+        with aioresponses() as mocked:
+            mocked.get(
+                "http://localhost:8096/System/Info",
+                payload={"ServerName": "Test", "Version": "10.8.0"},
+            )
+
+            service = JellyfinService(
+                urls=["http://localhost:8096"],
+                api_key="test-key",
+            )
+            url = await service.resolve_url()
+
+            assert url == "http://localhost:8096"
+            assert service.active_url == "http://localhost:8096"
+            assert service._client is not None
+
+            await service.close()
+
+    @pytest.mark.asyncio
+    async def test_resolve_first_url_preferred(self) -> None:
+        """Test that the first URL is used when all URLs work."""
+        with aioresponses() as mocked:
+            mocked.get(
+                "http://primary:8096/System/Info",
+                payload={"ServerName": "Primary", "Version": "10.8.0"},
+            )
+            # Backup should not be called
+
+            service = JellyfinService(
+                urls=["http://primary:8096", "http://backup:8096"],
+                api_key="test-key",
+            )
+            url = await service.resolve_url()
+
+            assert url == "http://primary:8096"
+            assert service.active_url == "http://primary:8096"
+
+            await service.close()
+
+    @pytest.mark.asyncio
+    async def test_failover_to_second_url(self) -> None:
+        """Test failover to second URL when first fails."""
+        with aioresponses() as mocked:
+            mocked.get(
+                "http://primary:8096/System/Info",
+                exception=aiohttp.ClientError("Connection refused"),
+            )
+            mocked.get(
+                "http://backup:8096/System/Info",
+                payload={"ServerName": "Backup", "Version": "10.8.0"},
+            )
+
+            service = JellyfinService(
+                urls=["http://primary:8096", "http://backup:8096"],
+                api_key="test-key",
+            )
+            url = await service.resolve_url()
+
+            assert url == "http://backup:8096"
+            assert service.active_url == "http://backup:8096"
+
+            await service.close()
+
+    @pytest.mark.asyncio
+    async def test_failover_to_third_url(self) -> None:
+        """Test failover to third URL when first two fail."""
+        with aioresponses() as mocked:
+            mocked.get(
+                "http://primary:8096/System/Info",
+                exception=aiohttp.ClientError("Connection refused"),
+            )
+            mocked.get(
+                "http://backup1:8096/System/Info",
+                status=500,
+            )
+            mocked.get(
+                "http://backup2:8096/System/Info",
+                payload={"ServerName": "Backup2", "Version": "10.8.0"},
+            )
+
+            service = JellyfinService(
+                urls=[
+                    "http://primary:8096",
+                    "http://backup1:8096",
+                    "http://backup2:8096",
+                ],
+                api_key="test-key",
+            )
+            url = await service.resolve_url()
+
+            assert url == "http://backup2:8096"
+            assert service.active_url == "http://backup2:8096"
+
+            await service.close()
+
+    @pytest.mark.asyncio
+    async def test_all_urls_fail_raises_error(self) -> None:
+        """Test that JellyfinConnectionError is raised when all URLs fail."""
+        with aioresponses() as mocked:
+            mocked.get(
+                "http://primary:8096/System/Info",
+                exception=aiohttp.ClientError("Connection refused"),
+            )
+            mocked.get(
+                "http://backup:8096/System/Info",
+                exception=aiohttp.ClientError("Connection refused"),
+            )
+
+            service = JellyfinService(
+                urls=["http://primary:8096", "http://backup:8096"],
+                api_key="test-key",
+            )
+
+            with pytest.raises(JellyfinConnectionError) as exc_info:
+                await service.resolve_url()
+
+            assert "All Jellyfin URLs failed" in str(exc_info.value)
+
+            await service.close()
+
+    @pytest.mark.asyncio
+    async def test_empty_urls_raises_error(self) -> None:
+        """Test that JellyfinError is raised when no URLs configured."""
+        service = JellyfinService(
+            urls=[],
+            api_key="test-key",
+        )
+
+        with pytest.raises(JellyfinError) as exc_info:
+            await service.resolve_url()
+
+        assert "No Jellyfin URLs configured" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_resolve_caches_client(self) -> None:
+        """Test that resolve_url caches the client for reuse."""
+        with aioresponses() as mocked:
+            mocked.get(
+                "http://localhost:8096/System/Info",
+                payload={"ServerName": "Test", "Version": "10.8.0"},
+            )
+
+            service = JellyfinService(
+                urls=["http://localhost:8096"],
+                api_key="test-key",
+            )
+
+            await service.resolve_url()
+            first_client = service._client
+
+            # Manually call _ensure_client to verify caching
+            client = await service._ensure_client()
+            assert client is first_client
+
+            await service.close()
+
+    @pytest.mark.asyncio
+    async def test_resolve_closes_old_client_on_switch(self) -> None:
+        """Test that old client is closed when switching URLs."""
+        with aioresponses() as mocked:
+            # First call - primary works
+            mocked.get(
+                "http://primary:8096/System/Info",
+                payload={"ServerName": "Primary", "Version": "10.8.0"},
+            )
+
+            service = JellyfinService(
+                urls=["http://primary:8096", "http://backup:8096"],
+                api_key="test-key",
+            )
+
+            await service.resolve_url()
+            first_client = service._client
+
+            # Second call - primary fails, backup works
+            mocked.get(
+                "http://primary:8096/System/Info",
+                exception=aiohttp.ClientError("Connection refused"),
+            )
+            mocked.get(
+                "http://backup:8096/System/Info",
+                payload={"ServerName": "Backup", "Version": "10.8.0"},
+            )
+
+            await service.resolve_url()
+            second_client = service._client
+
+            assert first_client is not second_client
+            assert first_client._session.closed
+
+            await service.close()
+
+
+class TestJellyfinServiceCheckHealth:
+    """Tests for JellyfinService.check_health() behavior."""
+
+    @pytest.mark.asyncio
+    async def test_check_health_returns_server_info(self) -> None:
+        """Test that check_health returns ServerInfo."""
+        with aioresponses() as mocked:
+            # resolve_url call
+            mocked.get(
+                "http://localhost:8096/System/Info",
+                payload={"ServerName": "Test", "Version": "10.8.0", "Id": "server-123"},
+            )
+            # Actual health check call
+            mocked.get(
+                "http://localhost:8096/System/Info",
+                payload={"ServerName": "Test", "Version": "10.8.0", "Id": "server-123"},
+            )
+
+            service = JellyfinService(
+                urls=["http://localhost:8096"],
+                api_key="test-key",
+            )
+            info = await service.check_health()
+
+            assert info.server_name == "Test"
+            assert info.version == "10.8.0"
+
+            await service.close()
+
+    @pytest.mark.asyncio
+    async def test_check_health_always_starts_from_top(self) -> None:
+        """Test that health check always re-checks from primary URL."""
+        with aioresponses() as mocked:
+            # First resolve - primary fails, backup works
+            mocked.get(
+                "http://primary:8096/System/Info",
+                exception=aiohttp.ClientError("Connection refused"),
+            )
+            mocked.get(
+                "http://backup:8096/System/Info",
+                payload={"ServerName": "Backup", "Version": "10.8.0"},
+            )
+            mocked.get(
+                "http://backup:8096/System/Info",
+                payload={"ServerName": "Backup", "Version": "10.8.0"},
+            )
+
+            service = JellyfinService(
+                urls=["http://primary:8096", "http://backup:8096"],
+                api_key="test-key",
+            )
+
+            # First health check - ends up on backup
+            await service.check_health()
+            assert service.active_url == "http://backup:8096"
+
+            # Second resolve - primary recovered
+            mocked.get(
+                "http://primary:8096/System/Info",
+                payload={"ServerName": "Primary", "Version": "10.8.0"},
+            )
+            mocked.get(
+                "http://primary:8096/System/Info",
+                payload={"ServerName": "Primary", "Version": "10.8.0"},
+            )
+
+            # Second health check - should switch back to primary
+            await service.check_health()
+            assert service.active_url == "http://primary:8096"
+
+            await service.close()
+
+
+class TestJellyfinServiceUrlBuilders:
+    """Tests for JellyfinService URL builder methods."""
+
+    def test_get_item_url_uses_active_url(self) -> None:
+        """Test get_item_url uses cached active URL."""
+        service = JellyfinService(
+            urls=["http://primary:8096", "http://backup:8096"],
+            api_key="test-key",
+        )
+        service._active_url = "http://backup:8096"
+
+        url = service.get_item_url("item-123")
+        assert "http://backup:8096" in url
+        assert "item-123" in url
+
+    def test_get_item_url_falls_back_to_primary(self) -> None:
+        """Test get_item_url falls back to first URL when no active URL."""
+        service = JellyfinService(
+            urls=["http://primary:8096", "http://backup:8096"],
+            api_key="test-key",
+        )
+
+        url = service.get_item_url("item-123")
+        assert "http://primary:8096" in url
+
+    def test_get_item_image_url_uses_active_url(self) -> None:
+        """Test get_item_image_url uses cached active URL."""
+        service = JellyfinService(
+            urls=["http://primary:8096", "http://backup:8096"],
+            api_key="test-key",
+        )
+        service._active_url = "http://backup:8096"
+
+        url = service.get_item_image_url("item-123")
+        assert "http://backup:8096" in url
+        assert "item-123" in url
+        assert "Primary" in url  # Default image type
+
+    def test_get_recently_added_url_uses_active_url(self) -> None:
+        """Test get_recently_added_url uses cached active URL."""
+        service = JellyfinService(
+            urls=["http://primary:8096", "http://backup:8096"],
+            api_key="test-key",
+        )
+        service._active_url = "http://backup:8096"
+
+        url = service.get_recently_added_url("Movie")
+        assert "http://backup:8096" in url
+        assert "Movie" in url
+
+
+class TestJellyfinServiceDelegatedMethods:
+    """Tests for JellyfinService delegated API methods."""
+
+    @pytest.mark.asyncio
+    async def test_get_recent_items_delegates_to_client(self) -> None:
+        """Test that get_recent_items delegates to the underlying client."""
+        from unittest.mock import AsyncMock, patch
+
+        service = JellyfinService(
+            urls=["http://localhost:8096"],
+            api_key="test-key",
+        )
+
+        # Set up a mock client
+        mock_client = MagicMock()
+        mock_client.get_recent_items = AsyncMock(return_value=[])
+        service._client = mock_client
+        service._active_url = "http://localhost:8096"
+
+        items = await service.get_recent_items("Movie", hours=24)
+
+        assert items == []
+        mock_client.get_recent_items.assert_called_once_with(
+            "Movie", hours=24, limit=20
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_random_item_delegates_to_client(self) -> None:
+        """Test that get_random_item delegates to the underlying client."""
+        from unittest.mock import AsyncMock
+
+        service = JellyfinService(
+            urls=["http://localhost:8096"],
+            api_key="test-key",
+        )
+
+        # Set up a mock client
+        mock_client = MagicMock()
+        mock_client.get_random_item = AsyncMock(return_value=None)
+        service._client = mock_client
+        service._active_url = "http://localhost:8096"
+
+        item = await service.get_random_item("Movie")
+
+        assert item is None
+        mock_client.get_random_item.assert_called_once_with("Movie")
+
+    @pytest.mark.asyncio
+    async def test_get_all_recent_items_delegates_to_client(self) -> None:
+        """Test that get_all_recent_items delegates to the underlying client."""
+        from unittest.mock import AsyncMock
+
+        service = JellyfinService(
+            urls=["http://localhost:8096"],
+            api_key="test-key",
+        )
+
+        # Set up a mock client
+        mock_client = MagicMock()
+        mock_client.get_all_recent_items = AsyncMock(return_value={"Movie": []})
+        service._client = mock_client
+        service._active_url = "http://localhost:8096"
+
+        result = await service.get_all_recent_items(["Movie"], hours=24)
+
+        assert result == {"Movie": []}
+        mock_client.get_all_recent_items.assert_called_once_with(["Movie"], hours=24)
+
+    @pytest.mark.asyncio
+    async def test_get_random_items_by_type_delegates_to_client(self) -> None:
+        """Test that get_random_items_by_type delegates to the underlying client."""
+        from unittest.mock import AsyncMock
+
+        service = JellyfinService(
+            urls=["http://localhost:8096"],
+            api_key="test-key",
+        )
+
+        # Set up a mock client
+        mock_client = MagicMock()
+        mock_client.get_random_items_by_type = AsyncMock(return_value={})
+        service._client = mock_client
+        service._active_url = "http://localhost:8096"
+
+        result = await service.get_random_items_by_type(["Movie", "Series"])
+
+        assert result == {}
+        mock_client.get_random_items_by_type.assert_called_once_with(["Movie", "Series"])
+
+
+class TestJellyfinServiceLifecycle:
+    """Tests for JellyfinService lifecycle management."""
+
+    @pytest.mark.asyncio
+    async def test_close_clears_state(self) -> None:
+        """Test that close clears active URL and client."""
+        with aioresponses() as mocked:
+            mocked.get(
+                "http://localhost:8096/System/Info",
+                payload={"ServerName": "Test", "Version": "10.8.0"},
+            )
+
+            service = JellyfinService(
+                urls=["http://localhost:8096"],
+                api_key="test-key",
+            )
+
+            await service.resolve_url()
+            assert service._active_url is not None
+            assert service._client is not None
+
+            await service.close()
+
+            assert service._active_url is None
+            assert service._client is None
+
+    @pytest.mark.asyncio
+    async def test_close_without_client(self) -> None:
+        """Test that close works when no client was created."""
+        service = JellyfinService(
+            urls=["http://localhost:8096"],
+            api_key="test-key",
+        )
+
+        # Should not raise
+        await service.close()
+
+    @pytest.mark.asyncio
+    async def test_context_manager(self) -> None:
+        """Test async context manager support."""
+        with aioresponses() as mocked:
+            mocked.get(
+                "http://localhost:8096/System/Info",
+                payload={"ServerName": "Test", "Version": "10.8.0"},
+            )
+
+            async with JellyfinService(
+                urls=["http://localhost:8096"],
+                api_key="test-key",
+            ) as service:
+                await service.resolve_url()
+                assert service._client is not None
+
+            # After context exit, should be closed
+            assert service._client is None
+            assert service._active_url is None

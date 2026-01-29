@@ -29,10 +29,12 @@ def create_health_cog(mock_bot: MagicMock) -> Any:
     with patch("bot.cogs.jellyfin.health.create_scheduler"):
         from bot.cogs.jellyfin.health import JellyfinHealthCog
 
+        # Set up the mock jellyfin_service on the bot
+        mock_bot.jellyfin_service = MagicMock()
+        mock_bot.jellyfin_service.check_health = AsyncMock()
+        mock_bot.jellyfin_service.active_url = "http://localhost:8096"
+
         cog = JellyfinHealthCog(mock_bot)
-        # Create a mock jellyfin client
-        cog.jellyfin = MagicMock()
-        cog.jellyfin.check_health = AsyncMock()
         return cog
 
 
@@ -273,7 +275,7 @@ class TestRunHealthCheck:
         self, cog: Any, server_info: ServerInfo
     ) -> None:
         """Test _handle_server_online is called on successful check."""
-        cog.jellyfin.check_health = AsyncMock(return_value=server_info)
+        cog.bot.jellyfin_service.check_health = AsyncMock(return_value=server_info)
 
         with patch.object(
             cog, "_handle_server_online", new_callable=AsyncMock
@@ -284,7 +286,7 @@ class TestRunHealthCheck:
     @pytest.mark.asyncio
     async def test_calls_handle_offline_on_connection_error(self, cog: Any) -> None:
         """Test _handle_server_offline is called on connection error."""
-        cog.jellyfin.check_health = AsyncMock(
+        cog.bot.jellyfin_service.check_health = AsyncMock(
             side_effect=JellyfinConnectionError("Connection refused")
         )
 
@@ -298,7 +300,7 @@ class TestRunHealthCheck:
     @pytest.mark.asyncio
     async def test_calls_handle_offline_on_api_error(self, cog: Any) -> None:
         """Test _handle_server_offline is called on API error."""
-        cog.jellyfin.check_health = AsyncMock(
+        cog.bot.jellyfin_service.check_health = AsyncMock(
             side_effect=JellyfinError("API error 500")
         )
 
@@ -313,7 +315,7 @@ class TestRunHealthCheck:
         self, cog: Any, server_info: ServerInfo
     ) -> None:
         """Test server info is stored on successful check."""
-        cog.jellyfin.check_health = AsyncMock(return_value=server_info)
+        cog.bot.jellyfin_service.check_health = AsyncMock(return_value=server_info)
         cog._last_server_info = None
 
         with patch.object(

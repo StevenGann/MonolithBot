@@ -68,7 +68,7 @@ from apscheduler.triggers.cron import CronTrigger
 from discord import app_commands
 from discord.ext import commands
 
-from bot.services.jellyfin import JellyfinClient, JellyfinError, JellyfinItem
+from bot.services.jellyfin import JellyfinError, JellyfinItem
 from bot.services.scheduler import create_scheduler, parse_time
 
 if TYPE_CHECKING:
@@ -113,8 +113,11 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
 
     Attributes:
         bot: Reference to the MonolithBot instance.
-        jellyfin: Jellyfin API client for fetching content.
         scheduler: APScheduler instance for timed announcements.
+
+    Note:
+        This cog uses the shared `bot.jellyfin_service` for API calls,
+        which handles multi-URL failover automatically.
 
     Example:
         The cog is automatically loaded. Commands available:
@@ -128,11 +131,10 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
         Initialize the announcements cog.
 
         Args:
-            bot: The MonolithBot instance. Used to access configuration
-                and Discord channels.
+            bot: The MonolithBot instance. Used to access configuration,
+                shared services, and Discord channels.
         """
         self.bot = bot
-        self.jellyfin: Optional[JellyfinClient] = None
         self.scheduler = create_scheduler(bot.config)
 
         # Track when the last announcement was sent
@@ -147,15 +149,13 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
         Initialize resources when the cog is loaded.
 
         Called automatically by discord.py when the cog is added to the bot.
-        Sets up the Jellyfin client, schedules announcement jobs for each
-        configured time, and starts the scheduler.
-        """
-        # Initialize Jellyfin client
-        self.jellyfin = JellyfinClient(
-            base_url=self.bot.config.jellyfin.url,
-            api_key=self.bot.config.jellyfin.api_key,
-        )
+        Schedules announcement jobs for each configured time and starts
+        the scheduler.
 
+        Note:
+            Uses the shared `bot.jellyfin_service` instead of creating
+            a separate client - the service handles multi-URL failover.
+        """
         # Schedule announcements for each configured time
         self._schedule_announcements()
         self.scheduler.start()
@@ -166,11 +166,10 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
         Clean up resources when the cog is unloaded.
 
         Called automatically by discord.py when the cog is removed.
-        Stops the scheduler and closes the HTTP client session.
+        Stops the scheduler. Note: The Jellyfin service is managed by the bot,
+        not the cog, so we don't close it here.
         """
         self.scheduler.shutdown(wait=False)
-        if self.jellyfin:
-            await self.jellyfin.close()
         logger.info("Jellyfin announcements cog unloaded")
 
     # -------------------------------------------------------------------------
@@ -258,13 +257,13 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
             logger.error("Announcement channel not found")
             return 0
 
-        if self.jellyfin is None:
-            logger.error("Jellyfin client not initialized")
+        if self.bot.jellyfin_service is None:
+            logger.error("Jellyfin service not initialized")
             return 0
 
         # Fetch recent items from Jellyfin
         try:
-            items_by_type = await self.jellyfin.get_all_recent_items(
+            items_by_type = await self.bot.jellyfin_service.get_all_recent_items(
                 content_types=self.bot.config.jellyfin.content_types,
                 hours=self.bot.config.jellyfin.schedule.lookback_hours,
             )
@@ -330,7 +329,7 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
         max_items = self.bot.config.jellyfin.schedule.max_items_per_type
 
         # Send section header with link to Recently Added page
-        recently_added_url = self.jellyfin.get_recently_added_url(content_type)
+        recently_added_url = self.bot.jellyfin_service.get_recently_added_url(content_type)
         section_embed = discord.Embed(
             title=f"{emoji} New {type_name}",
             url=recently_added_url,
@@ -374,7 +373,7 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
         # Create base embed with title linking to Jellyfin
         embed = discord.Embed(
             title=item.display_title,
-            url=self.jellyfin.get_item_url(item.id),
+            url=self.bot.jellyfin_service.get_item_url(item.id),
             color=color,
         )
 
@@ -386,7 +385,7 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
             embed.description = description
 
         # Add cover art thumbnail
-        image_url = self.jellyfin.get_item_image_url(item.id)
+        image_url = self.bot.jellyfin_service.get_item_image_url(item.id)
         embed.set_thumbnail(url=image_url)
 
         # Add type-specific fields
@@ -532,12 +531,15 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
 
         # Jellyfin status
         try:
-            server_info = await self.jellyfin.check_health()
+            server_info = await self.bot.jellyfin_service.check_health()
+            active_url = self.bot.jellyfin_service.active_url
             jellyfin_status = (
                 f"✅ Online\n"
                 f"Server: {server_info.server_name}\n"
                 f"Version: {server_info.version}"
             )
+            if active_url:
+                jellyfin_status += f"\nURL: {active_url}"
         except JellyfinError as e:
             jellyfin_status = f"❌ Offline\nError: {e}"
 

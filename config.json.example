@@ -6,7 +6,7 @@
   },
   "jellyfin": {
     "enabled": true,
-    "url": "http://localhost:8096",
+    "urls": ["http://primary:8096", "http://backup:8096"],
     "api_key": "YOUR_JELLYFIN_API_KEY",
     "content_types": ["Movie", "Series", "Episode", "Audio"],
     "schedule": {

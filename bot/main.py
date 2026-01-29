@@ -28,12 +28,16 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn, Optional
 
 import discord
 from discord.ext import commands
 
 from bot.config import Config, ConfigurationError, load_config
+from bot.services.jellyfin import JellyfinService
+
+if TYPE_CHECKING:
+    pass
 
 # Module-level logger for MonolithBot core
 logger = logging.getLogger("monolithbot")
@@ -79,6 +83,8 @@ class MonolithBot(commands.Bot):
     Attributes:
         config: The loaded configuration object containing Discord,
             Jellyfin, and scheduling settings.
+        jellyfin_service: Shared JellyfinService instance for all cogs.
+            None if Jellyfin integration is disabled.
         test_modes: TestModes instance controlling which tests run on startup.
         test_mode: Convenience property that returns True if any test mode is enabled.
 
@@ -118,6 +124,9 @@ class MonolithBot(commands.Bot):
         self._test_modes = test_modes or TestModes()
         self._shutdown_event = asyncio.Event()
 
+        # Shared Jellyfin service instance (initialized in setup_hook if enabled)
+        self.jellyfin_service: Optional[JellyfinService] = None
+
     @property
     def test_mode(self) -> bool:
         """Check if any test mode is enabled (for backward compatibility)."""
@@ -133,12 +142,23 @@ class MonolithBot(commands.Bot):
         Perform async setup after the bot is logged in but before it connects.
 
         This method is called automatically by discord.py during bot startup.
-        It loads all cogs (feature modules) and syncs slash commands with Discord.
+        It initializes shared services, loads all cogs (feature modules), and
+        syncs slash commands with Discord.
 
         Raises:
             Exception: Logs but does not raise if a cog fails to load,
                 allowing other cogs to still function.
         """
+        # Initialize shared services
+        if self.config.jellyfin.enabled:
+            self.jellyfin_service = JellyfinService(
+                urls=self.config.jellyfin.urls,
+                api_key=self.config.jellyfin.api_key,
+            )
+            logger.info(
+                f"Jellyfin service initialized with {len(self.config.jellyfin.urls)} URL(s)"
+            )
+
         logger.info("Loading cogs...")
 
         # List of cog modules to load
@@ -259,10 +279,16 @@ class MonolithBot(commands.Bot):
         if health_cog:
             logger.info("TEST: Sending health status notification...")
             try:
-                # Send an "online" notification for testing
-                server_info = await health_cog.jellyfin.check_health()
-                await health_cog._send_online_notification(server_info, None)
-                logger.info("TEST: Health notification sent!")
+                # Use shared service for health check
+                if self.jellyfin_service:
+                    server_info = await self.jellyfin_service.check_health()
+                    await health_cog._send_online_notification(server_info, None)
+                    logger.info(
+                        f"TEST: Health notification sent! "
+                        f"(active URL: {self.jellyfin_service.active_url})"
+                    )
+                else:
+                    logger.error("TEST: Jellyfin service not available")
             except Exception as e:
                 logger.error(f"TEST: Health notification failed: {e}")
         else:
@@ -298,11 +324,18 @@ class MonolithBot(commands.Bot):
         """
         Gracefully shutdown the bot.
 
-        Sets the shutdown event and closes the Discord connection.
-        Cogs should handle their own cleanup in their `cog_unload` methods.
+        Sets the shutdown event, closes shared services, and closes the
+        Discord connection. Cogs should handle their own cleanup in their
+        `cog_unload` methods.
         """
         logger.info("Shutting down MonolithBot...")
         self._shutdown_event.set()
+
+        # Close shared Jellyfin service
+        if self.jellyfin_service:
+            await self.jellyfin_service.close()
+            logger.info("Jellyfin service closed")
+
         await self.close()
 
 
@@ -503,7 +536,12 @@ def main() -> NoReturn | None:
     # Log configuration summary (excluding sensitive values)
     logger.info(f"Jellyfin enabled: {config.jellyfin.enabled}")
     if config.jellyfin.enabled:
-        logger.info(f"Jellyfin URL: {config.jellyfin.url}")
+        if len(config.jellyfin.urls) > 1:
+            logger.info(f"Jellyfin URLs ({len(config.jellyfin.urls)} configured for failover):")
+            for i, url in enumerate(config.jellyfin.urls):
+                logger.info(f"  [{i + 1}] {url}")
+        else:
+            logger.info(f"Jellyfin URL: {config.jellyfin.url}")
         logger.info(f"Announcement times: {', '.join(config.jellyfin.schedule.announcement_times)}")
         logger.info(f"Suggestion times: {', '.join(config.jellyfin.schedule.suggestion_times)}")
         logger.info(f"Timezone: {config.jellyfin.schedule.timezone}")

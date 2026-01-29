@@ -101,37 +101,67 @@ class TestJellyfinConfig:
         """Test creating JellyfinConfig with required fields."""
         config = JellyfinConfig(
             enabled=True,
-            url="http://localhost:8096",
+            urls=["http://localhost:8096"],
             api_key="test-api-key",
         )
         assert config.enabled is True
-        assert config.url == "http://localhost:8096"
+        assert config.urls == ["http://localhost:8096"]
+        assert config.url == "http://localhost:8096"  # Backward compat property
         assert config.api_key == "test-api-key"
         assert config.content_types == ["Movie", "Series", "Audio"]
 
     def test_trailing_slash_removed(self) -> None:
-        """Test that trailing slashes are removed from URL."""
+        """Test that trailing slashes are removed from URLs."""
         config = JellyfinConfig(
             enabled=True,
-            url="http://localhost:8096/",
+            urls=["http://localhost:8096/"],
             api_key="test-api-key",
         )
+        assert config.urls == ["http://localhost:8096"]
         assert config.url == "http://localhost:8096"
 
     def test_multiple_trailing_slashes_removed(self) -> None:
         """Test that multiple trailing slashes are removed."""
         config = JellyfinConfig(
             enabled=True,
-            url="http://localhost:8096///",
+            urls=["http://localhost:8096///"],
             api_key="test-api-key",
         )
+        assert config.urls == ["http://localhost:8096"]
         assert config.url == "http://localhost:8096"
+
+    def test_multiple_urls(self) -> None:
+        """Test creating JellyfinConfig with multiple URLs for failover."""
+        config = JellyfinConfig(
+            enabled=True,
+            urls=[
+                "http://primary.local:8096/",
+                "http://secondary.local:8096/",
+                "http://192.168.1.100:8096/",
+            ],
+            api_key="test-api-key",
+        )
+        assert len(config.urls) == 3
+        assert config.urls[0] == "http://primary.local:8096"
+        assert config.urls[1] == "http://secondary.local:8096"
+        assert config.urls[2] == "http://192.168.1.100:8096"
+        # .url property returns the first (primary) URL
+        assert config.url == "http://primary.local:8096"
+
+    def test_empty_urls_url_property(self) -> None:
+        """Test that url property returns empty string when no URLs."""
+        config = JellyfinConfig(
+            enabled=False,
+            urls=[],
+            api_key="",
+        )
+        assert config.url == ""
 
     def test_default_schedule(self) -> None:
         """Test that default schedule is created."""
         config = JellyfinConfig(
             enabled=True,
-            url="http://localhost:8096",
+            urls=["http://localhost:8096"],
             api_key="test-api-key",
         )
         assert config.schedule.announcement_times == ["17:00"]
@@ -141,7 +171,7 @@ class TestJellyfinConfig:
         """Test creating disabled JellyfinConfig."""
         config = JellyfinConfig(
             enabled=False,
-            url="",
+            urls=[],
             api_key="",
         )
         assert config.enabled is False

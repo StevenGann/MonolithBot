@@ -6,9 +6,10 @@ A Discord bot for monitoring your Jellyfin media server. MonolithBot keeps your 
 
 - **📢 Content Announcements**: Automatically announce newly added movies, TV shows, and music at scheduled times
 - **🔔 Server Health Monitoring**: Get notified when Jellyfin goes down and when it comes back online
+- **🔄 Multi-URL Failover**: Configure multiple Jellyfin URLs for automatic failover (e.g., internal/external, primary/backup)
 - **🎨 Rich Embeds**: Beautiful Discord embeds with cover images and direct links to your content
 - **⚙️ Flexible Configuration**: Configure via JSON file (local) or environment variables (Docker)
-- **✅ Well Tested**: Comprehensive test suite with 160+ tests and CI/CD integration
+- **✅ Well Tested**: Comprehensive test suite with 200+ tests and CI/CD integration
 
 ## Quick Start
 
@@ -41,7 +42,7 @@ A Discord bot for monitoring your Jellyfin media server. MonolithBot keeps your 
        "alert_channel_id": 123456789012345678
      },
      "jellyfin": {
-       "url": "http://localhost:8096",
+       "urls": ["http://localhost:8096"],
        "api_key": "YOUR_JELLYFIN_API_KEY"
      },
      "schedule": {
@@ -145,8 +146,36 @@ docker-compose -f docker-compose.local.yml up -d --build
 
 | Setting | Description | Required |
 |---------|-------------|----------|
-| `url` | Jellyfin server URL (e.g., `http://jellyfin:8096`) | ✅ |
+| `urls` | List of Jellyfin server URLs to try in order (e.g., `["http://primary:8096", "http://backup:8096"]`) | ✅ |
+| `url` | Single Jellyfin server URL (backward-compatible, use `urls` for new configs) | ❌ |
 | `api_key` | Jellyfin API key | ✅ |
+
+#### Multi-URL Failover
+
+MonolithBot supports multiple Jellyfin URLs for automatic failover. Configure your URLs in priority order:
+
+```json
+{
+  "jellyfin": {
+    "urls": [
+      "http://jellyfin-internal:8096",
+      "https://jellyfin.example.com"
+    ],
+    "api_key": "YOUR_API_KEY"
+  }
+}
+```
+
+**How it works:**
+- During health checks, URLs are tried from top to bottom
+- The first responding URL is cached for subsequent API calls
+- Health checks always restart from the primary (first) URL
+- If primary recovers, the bot automatically switches back to it
+
+**Use cases:**
+- Internal IP + external domain (prefer internal when available)
+- Primary server + backup/replica server
+- Different access methods for the same server
 
 ### Schedule Settings
 
@@ -171,7 +200,7 @@ For Docker deployment, use these environment variables:
 | `DISCORD_TOKEN` | `discord.token` |
 | `DISCORD_ANNOUNCEMENT_CHANNEL_ID` | `discord.announcement_channel_id` |
 | `DISCORD_ALERT_CHANNEL_ID` | `discord.alert_channel_id` |
-| `JELLYFIN_URL` | `jellyfin.url` |
+| `JELLYFIN_URL` | `jellyfin.urls` (single URL or comma-separated list) |
 | `JELLYFIN_API_KEY` | `jellyfin.api_key` |
 | `SCHEDULE_ANNOUNCEMENT_TIMES` | `schedule.announcement_times` (comma-separated) |
 | `SCHEDULE_TIMEZONE` | `schedule.timezone` |
@@ -179,6 +208,11 @@ For Docker deployment, use these environment variables:
 | `SCHEDULE_LOOKBACK_HOURS` | `schedule.lookback_hours` |
 | `SCHEDULE_MAX_ITEMS_PER_TYPE` | `schedule.max_items_per_type` |
 | `CONTENT_TYPES` | `content_types` (comma-separated) |
+
+**Multi-URL Example:**
+```bash
+JELLYFIN_URL="http://internal:8096,https://external.example.com"
+```
 
 **Note**: Environment variables take precedence over JSON config values.
 

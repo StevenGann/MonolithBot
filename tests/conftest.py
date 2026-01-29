@@ -48,7 +48,7 @@ def jellyfin_config(jellyfin_schedule_config: JellyfinScheduleConfig) -> Jellyfi
     """Create a mock Jellyfin configuration."""
     return JellyfinConfig(
         enabled=True,
-        url="http://localhost:8096",
+        urls=["http://localhost:8096"],
         api_key="test-api-key-12345",
         content_types=["Movie", "Series", "Audio"],
         schedule=jellyfin_schedule_config,

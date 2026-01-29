@@ -52,7 +52,6 @@ from apscheduler.triggers.interval import IntervalTrigger
 from discord.ext import commands
 
 from bot.services.jellyfin import (
-    JellyfinClient,
     JellyfinConnectionError,
     JellyfinError,
     ServerInfo,
@@ -82,8 +81,11 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
 
     Attributes:
         bot: Reference to the MonolithBot instance.
-        jellyfin: Jellyfin API client for health checks.
         scheduler: APScheduler instance for periodic checks.
+
+    Note:
+        This cog uses the shared `bot.jellyfin_service` for API calls,
+        which handles multi-URL failover automatically.
 
     Example:
         The cog is automatically loaded by the bot. To manually interact:
@@ -97,11 +99,10 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
         Initialize the health monitoring cog.
 
         Args:
-            bot: The MonolithBot instance. Used to access configuration
-                and Discord channels.
+            bot: The MonolithBot instance. Used to access configuration,
+                shared services, and Discord channels.
         """
         self.bot = bot
-        self.jellyfin: Optional[JellyfinClient] = None
         self.scheduler = create_scheduler(bot.config)
 
         # State tracking for server status
@@ -124,15 +125,13 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
         Initialize resources when the cog is loaded.
 
         Called automatically by discord.py when the cog is added to the bot.
-        Sets up the Jellyfin client, performs an initial health check to
-        establish baseline state, and starts the periodic health check scheduler.
-        """
-        # Initialize Jellyfin client
-        self.jellyfin = JellyfinClient(
-            base_url=self.bot.config.jellyfin.url,
-            api_key=self.bot.config.jellyfin.api_key,
-        )
+        Performs an initial health check to establish baseline state, and
+        starts the periodic health check scheduler.
 
+        Note:
+            Uses the shared `bot.jellyfin_service` instead of creating
+            a separate client - the service handles multi-URL failover.
+        """
         # Establish initial state (don't notify on startup)
         await self._initial_health_check()
 
@@ -155,11 +154,10 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
         Clean up resources when the cog is unloaded.
 
         Called automatically by discord.py when the cog is removed from the bot.
-        Stops the scheduler and closes the HTTP client session.
+        Stops the scheduler. Note: The Jellyfin service is managed by the bot,
+        not the cog, so we don't close it here.
         """
         self.scheduler.shutdown(wait=False)
-        if self.jellyfin:
-            await self.jellyfin.close()
         logger.info("Jellyfin health monitoring cog unloaded")
 
     # -------------------------------------------------------------------------
@@ -175,13 +173,14 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
         notifications every time the bot restarts.
         """
         try:
-            self._last_server_info = await self.jellyfin.check_health()
+            self._last_server_info = await self.bot.jellyfin_service.check_health()
             self._server_online = True
             self._last_online = datetime.now(timezone.utc)
             logger.info(
                 f"Initial health check passed - "
                 f"Server: {self._last_server_info.server_name} "
-                f"v{self._last_server_info.version}"
+                f"v{self._last_server_info.version} "
+                f"(via {self.bot.jellyfin_service.active_url})"
             )
         except JellyfinError as e:
             self._server_online = False
@@ -196,6 +195,11 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
         It attempts to contact the Jellyfin server and delegates to
         the appropriate handler based on success or failure.
 
+        Note:
+            The shared JellyfinService.check_health() always starts from
+            the top of the URL list, preferring the primary server when
+            it recovers from an outage.
+
         State transitions trigger notifications:
             - online → offline: Sends offline notification
             - offline → online: Sends online notification with downtime
@@ -205,7 +209,7 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
         logger.debug("Running Jellyfin health check...")
 
         try:
-            server_info = await self.jellyfin.check_health()
+            server_info = await self.bot.jellyfin_service.check_health()
             self._last_server_info = server_info
             await self._handle_server_online(server_info)
 
@@ -344,11 +348,21 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
             inline=False,
         )
 
-        embed.add_field(
-            name="Server URL",
-            value=self.bot.config.jellyfin.url,
-            inline=False,
-        )
+        # Show configured URLs
+        urls = self.bot.config.jellyfin.urls
+        if len(urls) > 1:
+            url_list = "\n".join(f"• {url}" for url in urls)
+            embed.add_field(
+                name=f"URLs Tried ({len(urls)})",
+                value=url_list,
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="Server URL",
+                value=self.bot.config.jellyfin.url,
+                inline=False,
+            )
 
         # Show relative time since last successful check
         if self._last_online:

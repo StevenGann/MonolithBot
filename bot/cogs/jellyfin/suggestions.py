@@ -68,7 +68,7 @@ from apscheduler.triggers.cron import CronTrigger
 from discord import app_commands
 from discord.ext import commands
 
-from bot.services.jellyfin import JellyfinClient, JellyfinError, JellyfinItem
+from bot.services.jellyfin import JellyfinError, JellyfinItem
 from bot.services.scheduler import create_scheduler, parse_time
 
 if TYPE_CHECKING:
@@ -136,8 +136,11 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
 
     Attributes:
         bot: Reference to the MonolithBot instance.
-        jellyfin: Jellyfin API client for fetching content.
         scheduler: APScheduler instance for timed suggestions.
+
+    Note:
+        This cog uses the shared `bot.jellyfin_service` for API calls,
+        which handles multi-URL failover automatically.
 
     Example:
         The cog is automatically loaded. Commands available:
@@ -150,11 +153,10 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
         Initialize the suggestions cog.
 
         Args:
-            bot: The MonolithBot instance. Used to access configuration
-                and Discord channels.
+            bot: The MonolithBot instance. Used to access configuration,
+                shared services, and Discord channels.
         """
         self.bot = bot
-        self.jellyfin: Optional[JellyfinClient] = None
         self.scheduler = create_scheduler(bot.config)
 
         # Track when the last suggestion was posted
@@ -169,15 +171,13 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
         Initialize resources when the cog is loaded.
 
         Called automatically by discord.py when the cog is added to the bot.
-        Sets up the Jellyfin client, schedules suggestion jobs for each
-        configured time, and starts the scheduler.
-        """
-        # Initialize Jellyfin client
-        self.jellyfin = JellyfinClient(
-            base_url=self.bot.config.jellyfin.url,
-            api_key=self.bot.config.jellyfin.api_key,
-        )
+        Schedules suggestion jobs for each configured time and starts
+        the scheduler.
 
+        Note:
+            Uses the shared `bot.jellyfin_service` instead of creating
+            a separate client - the service handles multi-URL failover.
+        """
         # Schedule suggestions for each configured time
         self._schedule_suggestions()
         self.scheduler.start()
@@ -188,11 +188,10 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
         Clean up resources when the cog is unloaded.
 
         Called automatically by discord.py when the cog is removed.
-        Stops the scheduler and closes the HTTP client session.
+        Stops the scheduler. Note: The Jellyfin service is managed by the bot,
+        not the cog, so we don't close it here.
         """
         self.scheduler.shutdown(wait=False)
-        if self.jellyfin:
-            await self.jellyfin.close()
         logger.info("Jellyfin suggestions cog unloaded")
 
     # -------------------------------------------------------------------------
@@ -280,13 +279,13 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
             logger.error("Suggestion channel not found")
             return 0
 
-        if self.jellyfin is None:
-            logger.error("Jellyfin client not initialized")
+        if self.bot.jellyfin_service is None:
+            logger.error("Jellyfin service not initialized")
             return 0
 
         # Fetch random items from Jellyfin
         try:
-            suggestions = await self.jellyfin.get_random_items_by_type(SUGGESTION_TYPES)
+            suggestions = await self.bot.jellyfin_service.get_random_items_by_type(SUGGESTION_TYPES)
         except JellyfinError as e:
             logger.error(f"Failed to fetch suggestions from Jellyfin: {e}")
             return 0
@@ -344,7 +343,7 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
         # Create base embed with title linking to Jellyfin
         embed = discord.Embed(
             title=f"{config['emoji']} {config['title']}",
-            url=self.jellyfin.get_item_url(item.id),
+            url=self.bot.jellyfin_service.get_item_url(item.id),
             color=config["color"],
         )
 
@@ -359,7 +358,7 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
             embed.add_field(name="Overview", value=description, inline=False)
 
         # Add cover art thumbnail
-        image_url = self.jellyfin.get_item_image_url(item.id)
+        image_url = self.bot.jellyfin_service.get_item_image_url(item.id)
         embed.set_thumbnail(url=image_url)
 
         # Add type-specific fields
@@ -428,9 +427,9 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
         # Defer since fetching from Jellyfin may take a moment
         await interaction.response.defer()
 
-        if self.jellyfin is None:
+        if self.bot.jellyfin_service is None:
             await interaction.followup.send(
-                "❌ Jellyfin client not initialized.",
+                "❌ Jellyfin service not initialized.",
                 ephemeral=True,
             )
             return
@@ -461,7 +460,7 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
 
         # Fetch a random item of the specified type
         try:
-            item = await self.jellyfin.get_random_item(jellyfin_type)
+            item = await self.bot.jellyfin_service.get_random_item(jellyfin_type)
         except JellyfinError as e:
             await interaction.followup.send(
                 f"❌ Failed to fetch from Jellyfin: {e}",

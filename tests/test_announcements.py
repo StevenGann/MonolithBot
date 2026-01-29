@@ -29,15 +29,21 @@ def create_announcements_cog(
     with patch("bot.cogs.jellyfin.announcements.create_scheduler"):
         from bot.cogs.jellyfin.announcements import JellyfinAnnouncementsCog
 
-        cog = JellyfinAnnouncementsCog(mock_bot)
-        # Create a mock jellyfin client
-        cog.jellyfin = MagicMock()
-        cog.jellyfin.get_item_url = MagicMock(
+        # Set up the mock jellyfin_service on the bot
+        mock_bot.jellyfin_service = MagicMock()
+        mock_bot.jellyfin_service.get_item_url = MagicMock(
             side_effect=lambda id: f"http://jellyfin/item/{id}"
         )
-        cog.jellyfin.get_item_image_url = MagicMock(
+        mock_bot.jellyfin_service.get_item_image_url = MagicMock(
             side_effect=lambda id: f"http://jellyfin/image/{id}"
         )
+        mock_bot.jellyfin_service.get_recently_added_url = MagicMock(
+            side_effect=lambda content_type: f"http://jellyfin/recent/{content_type}"
+        )
+        mock_bot.jellyfin_service.get_all_recent_items = AsyncMock(return_value={})
+        mock_bot.jellyfin_service.check_health = AsyncMock()
+
+        cog = JellyfinAnnouncementsCog(mock_bot)
         return cog
 
 
@@ -419,7 +425,7 @@ class TestAnnounceNewContent:
         self, cog: Any, mock_discord_channel: MagicMock
     ) -> None:
         """Test returns 0 when no new items found."""
-        cog.jellyfin.get_all_recent_items = AsyncMock(return_value={})
+        cog.bot.jellyfin_service.get_all_recent_items = AsyncMock(return_value={})
 
         count = await cog.announce_new_content(channel=mock_discord_channel)
 
@@ -433,7 +439,7 @@ class TestAnnounceNewContent:
         jellyfin_movie: JellyfinItem,
     ) -> None:
         """Test returns correct item count."""
-        cog.jellyfin.get_all_recent_items = AsyncMock(
+        cog.bot.jellyfin_service.get_all_recent_items = AsyncMock(
             return_value={"Movie": [jellyfin_movie]}
         )
 
@@ -449,7 +455,7 @@ class TestAnnounceNewContent:
         jellyfin_movie: JellyfinItem,
     ) -> None:
         """Test sends header embed first."""
-        cog.jellyfin.get_all_recent_items = AsyncMock(
+        cog.bot.jellyfin_service.get_all_recent_items = AsyncMock(
             return_value={"Movie": [jellyfin_movie]}
         )
 
@@ -468,7 +474,7 @@ class TestAnnounceNewContent:
         jellyfin_movie: JellyfinItem,
     ) -> None:
         """Test updates _last_announcement timestamp."""
-        cog.jellyfin.get_all_recent_items = AsyncMock(
+        cog.bot.jellyfin_service.get_all_recent_items = AsyncMock(
             return_value={"Movie": [jellyfin_movie]}
         )
         assert cog._last_announcement is None

@@ -19,7 +19,11 @@ Example JSON config (config.json):
         },
         "jellyfin": {
             "enabled": true,
-            "url": "http://localhost:8096",
+            "urls": [
+                "http://jellyfin.mydomain.com:8096",
+                "http://jellyfin.local:8096",
+                "http://192.168.1.100:8096"
+            ],
             "api_key": "API_KEY",
             "content_types": ["Movie", "Series", "Audio"],
             "schedule": {
@@ -37,11 +41,15 @@ Equivalent environment variables:
     DISCORD_TOKEN=BOT_TOKEN
     DISCORD_ANNOUNCEMENT_CHANNEL_ID=123456789
     JELLYFIN_ENABLED=true
-    JELLYFIN_URL=http://localhost:8096
+    JELLYFIN_URL=http://primary:8096,http://secondary:8096,http://192.168.1.100:8096
     JELLYFIN_API_KEY=API_KEY
     JELLYFIN_CONTENT_TYPES=Movie,Series,Audio
     JELLYFIN_SCHEDULE_ANNOUNCEMENT_TIMES=17:00
     JELLYFIN_SCHEDULE_TIMEZONE=America/Los_Angeles
+
+Note: Jellyfin URLs support multiple values for failover. The bot will try each URL
+in order during health checks and use the first working one for API calls.
+Single URL strings are still supported for backward compatibility.
 
 See Also:
     - config.json.example: Full example with all options
@@ -120,8 +128,10 @@ class JellyfinConfig:
 
     Attributes:
         enabled: Whether Jellyfin integration is enabled.
-        url: Base URL of the Jellyfin server (e.g., "http://localhost:8096").
+        urls: List of Jellyfin server URLs to try in order (for failover).
+            Each URL should be a base URL like "http://localhost:8096".
             Trailing slashes are automatically removed.
+            During health checks, URLs are tried in order until one works.
         api_key: Jellyfin API key for authentication.
             Generate this in Jellyfin Dashboard → API Keys.
         content_types: List of Jellyfin content types to announce.
@@ -130,7 +140,7 @@ class JellyfinConfig:
     """
 
     enabled: bool
-    url: str
+    urls: list[str]
     api_key: str
     content_types: list[str] = field(
         default_factory=lambda: ["Movie", "Series", "Audio"]
@@ -138,8 +148,17 @@ class JellyfinConfig:
     schedule: JellyfinScheduleConfig = field(default_factory=JellyfinScheduleConfig)
 
     def __post_init__(self) -> None:
-        """Normalize the URL by removing trailing slashes."""
-        self.url = self.url.rstrip("/")
+        """Normalize all URLs by removing trailing slashes."""
+        self.urls = [url.rstrip("/") for url in self.urls]
+
+    @property
+    def url(self) -> str:
+        """Get the primary (first) URL for backward compatibility.
+
+        Note: For actual API calls, use JellyfinService which handles
+        URL failover. This property is mainly for logging/display.
+        """
+        return self.urls[0] if self.urls else ""
 
 
 @dataclass
@@ -432,13 +451,17 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
 
     Raises:
         ConfigurationError: If Jellyfin is enabled but required values
-            (url, api_key) are not provided in either source.
+            (urls, api_key) are not provided in either source.
 
     Environment Variables:
         - JELLYFIN_ENABLED: Whether Jellyfin integration is enabled
-        - JELLYFIN_URL: Server base URL
+        - JELLYFIN_URL: Server base URL(s), comma-separated for multiple
         - JELLYFIN_API_KEY: API key for authentication
         - JELLYFIN_CONTENT_TYPES: Comma-separated content types
+
+    JSON supports both single URL and list formats:
+        - "url": "http://server:8096" (backward compatible)
+        - "urls": ["http://primary:8096", "http://backup:8096"] (new format)
     """
     jellyfin_json = json_config.get("jellyfin", {})
 
@@ -448,12 +471,33 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
         enabled_env if enabled_env is not None else jellyfin_json.get("enabled", True)
     )
 
-    # URL is required if enabled
-    url = _get_env("JELLYFIN_URL") or jellyfin_json.get("url")
-    if enabled and not url:
+    # URLs: env var takes precedence, supports comma-separated list
+    # JSON supports both "url" (string) and "urls" (list) for backward compatibility
+    urls_from_env = _get_env_list("JELLYFIN_URL")
+    if urls_from_env:
+        urls = urls_from_env
+    else:
+        # Check for "urls" list first, then fall back to "url" string
+        urls_from_json = jellyfin_json.get("urls")
+        if urls_from_json is not None:
+            # "urls" key exists - should be a list
+            if isinstance(urls_from_json, list):
+                urls = urls_from_json
+            else:
+                # Handle case where "urls" is accidentally a string
+                urls = [urls_from_json]
+        else:
+            # Fall back to legacy "url" string
+            url_from_json = jellyfin_json.get("url")
+            if url_from_json:
+                urls = [url_from_json] if isinstance(url_from_json, str) else url_from_json
+            else:
+                urls = []
+
+    if enabled and not urls:
         raise ConfigurationError(
             "Jellyfin URL is required. Set JELLYFIN_URL environment variable "
-            "or 'jellyfin.url' in config.json"
+            "or 'jellyfin.url' (string) or 'jellyfin.urls' (list) in config.json"
         )
 
     # API key is required if enabled
@@ -475,7 +519,7 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
 
     return JellyfinConfig(
         enabled=enabled,
-        url=url or "",
+        urls=urls or [],
         api_key=api_key or "",
         content_types=content_types,
         schedule=schedule_config,

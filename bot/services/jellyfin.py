@@ -1,44 +1,47 @@
 """
-Jellyfin API client for MonolithBot.
+Jellyfin API client and service for MonolithBot.
 
 This module provides an async HTTP client for interacting with the Jellyfin
-media server API. It handles authentication, error handling, and data parsing
-for the specific endpoints needed by MonolithBot.
+media server API, as well as a service layer that handles multi-URL failover.
 
 Key Features:
     - Async/await support using aiohttp
     - Automatic session management with lazy initialization
+    - Multi-URL failover support for high availability
     - Structured error hierarchy for different failure modes
     - Data classes for type-safe response handling
+
+Architecture:
+    - JellyfinClient: Low-level HTTP client for a single Jellyfin URL
+    - JellyfinService: High-level service with multi-URL failover logic
 
 Jellyfin API Endpoints Used:
     - GET /System/Info - Server health and version info
     - GET /Items - Query library items with filters
 
 Example:
-    >>> from bot.services.jellyfin import JellyfinClient
+    >>> from bot.services.jellyfin import JellyfinService
     >>>
-    >>> client = JellyfinClient(
-    ...     base_url="http://localhost:8096",
+    >>> # Create service with multiple URLs for failover
+    >>> service = JellyfinService(
+    ...     urls=["http://primary:8096", "http://backup:8096"],
     ...     api_key="your-api-key"
     ... )
     >>>
-    >>> # Check server health
-    >>> info = await client.check_health()
-    >>> print(f"Connected to {info.server_name} v{info.version}")
+    >>> # Health check tries URLs in order, returns first working one
+    >>> info = await service.check_health()
+    >>> print(f"Connected to {info.server_name} via {service.active_url}")
     >>>
-    >>> # Get recent movies
-    >>> movies = await client.get_recent_items("Movie", hours=24)
-    >>> for movie in movies:
-    ...     print(f"  - {movie.display_title}")
+    >>> # Subsequent calls use the cached active URL
+    >>> movies = await service.get_recent_items("Movie", hours=24)
     >>>
     >>> # Always close when done
-    >>> await client.close()
+    >>> await service.close()
 
 See Also:
     - Jellyfin API docs: https://api.jellyfin.org/
-    - bot.cogs.announcements: Uses this client for content announcements
-    - bot.cogs.health: Uses this client for health monitoring
+    - bot.cogs.jellyfin.announcements: Uses this service for content announcements
+    - bot.cogs.jellyfin.health: Uses this service for health monitoring
 """
 
 import logging
@@ -769,3 +772,326 @@ class JellyfinClient:
             artists=data.get("Artists"),
             date_created=date_created,
         )
+
+
+# =============================================================================
+# Jellyfin Service (Multi-URL Failover)
+# =============================================================================
+
+
+class JellyfinService:
+    """
+    High-level Jellyfin service with multi-URL failover support.
+
+    This service wraps JellyfinClient and provides automatic failover
+    between multiple Jellyfin server URLs. URLs are tried in order during
+    health checks, and the working URL is cached for subsequent API calls.
+
+    Key behaviors:
+        - Health checks always start from the top of the URL list, preferring
+          the primary server when it recovers from an outage.
+        - Other API calls use the cached active URL for efficiency.
+        - If no URL has been resolved yet, API calls trigger URL resolution.
+
+    Attributes:
+        urls: List of Jellyfin server URLs to try, in priority order.
+        api_key: API key for authentication with Jellyfin.
+        active_url: The currently active (working) URL, or None if not yet resolved.
+
+    Example:
+        >>> service = JellyfinService(
+        ...     urls=["http://primary:8096", "http://backup:8096"],
+        ...     api_key="your-api-key"
+        ... )
+        >>>
+        >>> # Health check tries URLs in order
+        >>> info = await service.check_health()
+        >>> print(f"Connected via {service.active_url}")
+        >>>
+        >>> # Subsequent calls use cached URL
+        >>> movies = await service.get_recent_items("Movie", hours=24)
+        >>>
+        >>> await service.close()
+
+    See Also:
+        - JellyfinClient: Low-level single-URL client used internally.
+        - bot.config.JellyfinConfig: Configuration with URL list.
+    """
+
+    def __init__(self, urls: list[str], api_key: str) -> None:
+        """
+        Initialize the Jellyfin service.
+
+        Args:
+            urls: List of Jellyfin server URLs to try, in priority order.
+                The first URL is considered the "primary" and is preferred
+                when available. Each URL should be a base URL like
+                "http://localhost:8096" (trailing slashes are stripped).
+            api_key: Jellyfin API key for authentication.
+        """
+        self.urls = [url.rstrip("/") for url in urls]
+        self.api_key = api_key
+        self._active_url: str | None = None
+        self._client: JellyfinClient | None = None
+
+    @property
+    def active_url(self) -> str | None:
+        """
+        Get the currently active (working) URL.
+
+        Returns:
+            The URL that successfully passed the last health check,
+            or None if no URL has been resolved yet.
+        """
+        return self._active_url
+
+    async def _ensure_client(self) -> JellyfinClient:
+        """
+        Ensure we have a working client, resolving URL if needed.
+
+        If no active URL is set, triggers URL resolution by trying
+        each URL in order until one responds successfully.
+
+        Returns:
+            A JellyfinClient connected to the active URL.
+
+        Raises:
+            JellyfinError: If no URLs are configured or all URLs fail.
+        """
+        if self._client is None or self._active_url is None:
+            await self.resolve_url()
+        return self._client
+
+    async def resolve_url(self) -> str:
+        """
+        Try URLs in order and return the first working one.
+
+        This method attempts to connect to each URL in the configured
+        list, stopping at the first one that responds successfully.
+        The working URL and its client are cached for subsequent calls.
+
+        This is called automatically by health checks and is also
+        triggered by API calls if no URL has been resolved yet.
+
+        Returns:
+            The URL that successfully responded.
+
+        Raises:
+            JellyfinConnectionError: If all URLs fail to connect.
+            JellyfinError: If no URLs are configured.
+
+        Example:
+            >>> url = await service.resolve_url()
+            >>> print(f"Using {url}")
+        """
+        if not self.urls:
+            raise JellyfinError("No Jellyfin URLs configured")
+
+        errors: list[str] = []
+
+        for url in self.urls:
+            logger.debug(f"Trying Jellyfin URL: {url}")
+            client = JellyfinClient(base_url=url, api_key=self.api_key)
+
+            try:
+                await client.check_health()
+                # Success! Update cached client and URL
+                if self._client and self._client is not client:
+                    await self._client.close()
+                self._client = client
+                self._active_url = url
+                logger.info(f"Jellyfin URL resolved: {url}")
+                return url
+
+            except JellyfinConnectionError as e:
+                logger.warning(f"Failed to connect to {url}: {e}")
+                errors.append(f"{url}: {e}")
+                await client.close()
+
+            except JellyfinError as e:
+                logger.warning(f"Jellyfin error at {url}: {e}")
+                errors.append(f"{url}: {e}")
+                await client.close()
+
+        # All URLs failed
+        error_summary = "; ".join(errors)
+        raise JellyfinConnectionError(
+            f"All Jellyfin URLs failed: {error_summary}"
+        )
+
+    async def check_health(self) -> ServerInfo:
+        """
+        Check Jellyfin server health, starting from the primary URL.
+
+        Unlike other API methods that use the cached active URL, health
+        checks always start from the top of the URL list. This ensures
+        that when the primary server recovers from an outage, subsequent
+        health checks will detect this and switch back to it.
+
+        Returns:
+            ServerInfo from the first responding server.
+
+        Raises:
+            JellyfinConnectionError: If all URLs fail to connect.
+            JellyfinAuthError: If authentication fails on all URLs.
+            JellyfinError: If all URLs return errors.
+
+        Example:
+            >>> info = await service.check_health()
+            >>> print(f"Server: {info.server_name} via {service.active_url}")
+        """
+        # Always try from the top of the URL list for health checks
+        await self.resolve_url()
+
+        # Now get the actual server info from the resolved client
+        return await self._client.check_health()
+
+    # -------------------------------------------------------------------------
+    # Delegated API Methods
+    # -------------------------------------------------------------------------
+
+    async def get_recent_items(
+        self,
+        item_type: str,
+        hours: int = 24,
+        limit: int = 20,
+    ) -> list[JellyfinItem]:
+        """
+        Get recently added items of a specific type.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.get_recent_items for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.get_recent_items(item_type, hours=hours, limit=limit)
+
+    async def get_all_recent_items(
+        self,
+        content_types: list[str],
+        hours: int = 24,
+    ) -> dict[str, list[JellyfinItem]]:
+        """
+        Get recently added items for multiple content types.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.get_all_recent_items for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.get_all_recent_items(content_types, hours=hours)
+
+    async def get_random_item(
+        self,
+        item_type: str,
+    ) -> Optional[JellyfinItem]:
+        """
+        Get a random item of a specific type from the library.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.get_random_item for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.get_random_item(item_type)
+
+    async def get_random_items_by_type(
+        self,
+        content_types: list[str],
+    ) -> dict[str, JellyfinItem]:
+        """
+        Get a random item for each specified content type.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.get_random_items_by_type for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.get_random_items_by_type(content_types)
+
+    # -------------------------------------------------------------------------
+    # URL Builders (use active URL)
+    # -------------------------------------------------------------------------
+
+    def get_item_image_url(
+        self,
+        item_id: str,
+        image_type: str = "Primary",
+        max_width: int = 400,
+    ) -> str:
+        """
+        Build URL for an item's image using the active URL.
+
+        Note: This method uses the cached active URL. If no URL has been
+        resolved yet, it falls back to the primary (first) URL.
+
+        See JellyfinClient.get_item_image_url for full documentation.
+        """
+        base_url = self._active_url or self.urls[0]
+        return (
+            f"{base_url}/Items/{item_id}/Images/{image_type}"
+            f"?maxWidth={max_width}"
+        )
+
+    def get_item_url(self, item_id: str) -> str:
+        """
+        Build URL to view/play an item in the Jellyfin web UI.
+
+        Note: This method uses the cached active URL. If no URL has been
+        resolved yet, it falls back to the primary (first) URL.
+
+        See JellyfinClient.get_item_url for full documentation.
+        """
+        base_url = self._active_url or self.urls[0]
+        return f"{base_url}/web/index.html#!/details?id={item_id}"
+
+    def get_recently_added_url(self, content_type: str) -> str:
+        """
+        Build URL to the recently added page for a specific content type.
+
+        Note: This method uses the cached active URL. If no URL has been
+        resolved yet, it falls back to the primary (first) URL.
+
+        See JellyfinClient.get_recently_added_url for full documentation.
+        """
+        base_url = self._active_url or self.urls[0]
+        type_mapping = {
+            "Movie": "Movie",
+            "Series": "Series",
+            "Audio": "Audio",
+            "Music": "Audio",
+            "Episode": "Episode",
+        }
+        jellyfin_type = type_mapping.get(content_type, content_type)
+        return (
+            f"{base_url}/web/index.html#!/list.html"
+            f"?type={jellyfin_type}&sortBy=DateCreated&sortOrder=Descending"
+        )
+
+    # -------------------------------------------------------------------------
+    # Lifecycle
+    # -------------------------------------------------------------------------
+
+    async def close(self) -> None:
+        """
+        Close the service and release resources.
+
+        Closes the underlying JellyfinClient's HTTP session. Safe to call
+        multiple times or if no client was ever created.
+        """
+        if self._client:
+            await self._client.close()
+            self._client = None
+        self._active_url = None
+
+    async def __aenter__(self) -> "JellyfinService":
+        """Support async context manager usage."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Close on context manager exit."""
+        await self.close()
