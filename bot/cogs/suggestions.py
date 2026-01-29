@@ -40,7 +40,12 @@ Suggestion Structure:
     ```
 
 Slash Commands:
-    /suggest - Manually trigger random suggestions (admin only)
+    /suggest - Get random suggestions for all types (movie, show, album)
+    /suggest movie - Get a random movie suggestion
+    /suggest show - Get a random TV show suggestion
+    /suggest episode - Get a random episode suggestion
+    /suggest album - Get a random album suggestion
+    /suggest song - Get a random song suggestion
 
 Configuration:
     Uses these settings from bot.config:
@@ -77,8 +82,17 @@ logger = logging.getLogger("monolithbot.suggestions")
 # Constants
 # =============================================================================
 
-# Content types for suggestions (Movie, Series, and MusicAlbum)
+# Content types for scheduled suggestions (Movie, Series, and MusicAlbum)
 SUGGESTION_TYPES = ["Movie", "Series", "MusicAlbum"]
+
+# Mapping from user-friendly command choices to Jellyfin types
+CONTENT_TYPE_CHOICES = {
+    "movie": "Movie",
+    "show": "Series",
+    "episode": "Episode",
+    "album": "MusicAlbum",
+    "song": "Audio",
+}
 
 # Display names and emojis for each suggestion type
 SUGGESTION_CONFIG = {
@@ -92,9 +106,19 @@ SUGGESTION_CONFIG = {
         "title": "TV Show Suggestion",
         "color": discord.Color.green(),
     },
+    "Episode": {
+        "emoji": "📺",
+        "title": "Episode Suggestion",
+        "color": discord.Color.teal(),
+    },
     "MusicAlbum": {
-        "emoji": "🎵",
+        "emoji": "💿",
         "title": "Album Suggestion",
+        "color": discord.Color.purple(),
+    },
+    "Audio": {
+        "emoji": "🎵",
+        "title": "Song Suggestion",
         "color": discord.Color.purple(),
     },
 }
@@ -373,34 +397,87 @@ class SuggestionsCog(commands.Cog, name="Suggestions"):
 
     @app_commands.command(
         name="suggest",
-        description="Get random content suggestions from the library",
+        description="Get a random content suggestion from the library",
     )
-    @app_commands.default_permissions(administrator=True)
-    async def suggest_command(self, interaction: discord.Interaction) -> None:
+    @app_commands.describe(
+        content_type="Type of content to suggest (leave empty for all types)"
+    )
+    @app_commands.choices(
+        content_type=[
+            app_commands.Choice(name="Movie", value="movie"),
+            app_commands.Choice(name="TV Show", value="show"),
+            app_commands.Choice(name="Episode", value="episode"),
+            app_commands.Choice(name="Album", value="album"),
+            app_commands.Choice(name="Song", value="song"),
+        ]
+    )
+    async def suggest_command(
+        self,
+        interaction: discord.Interaction,
+        content_type: Optional[str] = None,
+    ) -> None:
         """
-        Manually trigger random suggestions (admin only).
+        Get a random suggestion from the library.
 
-        This slash command allows administrators to trigger suggestions
-        immediately without waiting for the scheduled time. Useful for
-        testing or when users want fresh recommendations.
+        If no content type is specified, posts suggestions for all types
+        (movie, show, album). If a specific type is given, posts just
+        one suggestion of that type.
 
-        The response is ephemeral (only visible to the admin).
+        Available to all users.
         """
         # Defer since fetching from Jellyfin may take a moment
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
 
-        count = await self.post_random_suggestions()
-
-        if count > 0:
+        if self.jellyfin is None:
             await interaction.followup.send(
-                f"✅ Posted {count} random suggestion(s)!",
+                "❌ Jellyfin client not initialized.",
                 ephemeral=True,
             )
-        else:
+            return
+
+        # If no content type specified, post all suggestions
+        if content_type is None:
+            count = await self.post_random_suggestions(interaction.channel)
+            if count > 0:
+                await interaction.followup.send(
+                    f"✅ Posted {count} random suggestion(s)!",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    "ℹ️ No content available for suggestions.",
+                    ephemeral=True,
+                )
+            return
+
+        # Get the Jellyfin type from the user's choice
+        jellyfin_type = CONTENT_TYPE_CHOICES.get(content_type)
+        if not jellyfin_type:
             await interaction.followup.send(
-                "ℹ️ No content available for suggestions.",
+                f"❌ Unknown content type: {content_type}",
                 ephemeral=True,
             )
+            return
+
+        # Fetch a random item of the specified type
+        try:
+            item = await self.jellyfin.get_random_item(jellyfin_type)
+        except JellyfinError as e:
+            await interaction.followup.send(
+                f"❌ Failed to fetch from Jellyfin: {e}",
+                ephemeral=True,
+            )
+            return
+
+        if item is None:
+            await interaction.followup.send(
+                f"ℹ️ No {content_type} content available in the library.",
+            )
+            return
+
+        # Create and send the suggestion embed
+        embed = self._create_suggestion_embed(jellyfin_type, item)
+        await interaction.followup.send(embed=embed)
 
 
 # =============================================================================
