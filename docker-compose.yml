@@ -3,28 +3,20 @@ services:
     image: ghcr.io/stevengann/monolithbot:latest
     container_name: monolithbot
     restart: unless-stopped
-    environment:
-      # Discord Configuration
-      - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - DISCORD_ANNOUNCEMENT_CHANNEL_ID=${DISCORD_ANNOUNCEMENT_CHANNEL_ID}
-      - DISCORD_ALERT_CHANNEL_ID=${DISCORD_ALERT_CHANNEL_ID:-}
+    
+    # Mount config.json from host directory
+    # All configuration is read from config.json
+    # Environment variables can optionally override JSON values if needed
+    volumes:
+      - /mnt/App-Storage/Container-Data/monolithbot/config/config.json:/app/config.json:ro
 
-      # Jellyfin Configuration
-      - JELLYFIN_URL=${JELLYFIN_URL:-http://jellyfin:8096}
-      - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
-
-      # Schedule Configuration (optional)
-      - SCHEDULE_ANNOUNCEMENT_TIMES=${SCHEDULE_ANNOUNCEMENT_TIMES:-17:00}
-      - SCHEDULE_TIMEZONE=${SCHEDULE_TIMEZONE:-America/Los_Angeles}
-      - SCHEDULE_HEALTH_CHECK_INTERVAL=${SCHEDULE_HEALTH_CHECK_INTERVAL:-5}
-      - SCHEDULE_LOOKBACK_HOURS=${SCHEDULE_LOOKBACK_HOURS:-24}
-
-      # Content Types (optional)
-      - CONTENT_TYPES=${CONTENT_TYPES:-Movie,Series,Audio}
-
-    # Optional: Mount a config file instead of using env vars
-    # volumes:
-    #   - ./config.json:/app/config.json:ro
+    # Optional: Override specific settings via environment variables
+    # (Environment variables take precedence over config.json)
+    # Uncomment and set these if you want to override config.json values:
+    # environment:
+    #   - DISCORD_TOKEN=${DISCORD_TOKEN}
+    #   - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
+    #   - JELLYFIN_URL=${JELLYFIN_URL}
 
     # Optional: Connect to the same network as Jellyfin
     # networks:
