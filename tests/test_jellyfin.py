@@ -21,6 +21,7 @@ from aioresponses import aioresponses
 from bot.services.jellyfin import (
     JellyfinClient,
     JellyfinItem,
+    JellyfinService,
     ServerInfo,
     JellyfinError,
     JellyfinConnectionError,
@@ -882,8 +883,6 @@ class TestJellyfinClientSession:
 # JellyfinService Tests
 # =============================================================================
 
-from bot.services.jellyfin import JellyfinService
-
 
 class TestJellyfinServiceInit:
     """Tests for JellyfinService initialization."""
@@ -1265,7 +1264,7 @@ class TestJellyfinServiceDelegatedMethods:
     @pytest.mark.asyncio
     async def test_get_recent_items_delegates_to_client(self) -> None:
         """Test that get_recent_items delegates to the underlying client."""
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import AsyncMock
 
         service = JellyfinService(
             urls=["http://localhost:8096"],

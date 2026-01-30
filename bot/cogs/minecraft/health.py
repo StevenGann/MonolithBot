@@ -497,7 +497,7 @@ class MinecraftHealthCog(commands.Cog, name="MinecraftHealth"):
                 status = await service.get_status(state.name)
 
                 # Build status text
-                status_text = f"✅ **Online**\n"
+                status_text = "✅ **Online**\n"
                 status_text += f"Players: {status.player_count}/{status.max_players}\n"
                 status_text += f"Version: {status.version}\n"
                 status_text += f"Latency: {status.latency_ms:.0f}ms"

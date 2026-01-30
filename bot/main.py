@@ -397,8 +397,6 @@ class MonolithBot(commands.Bot):
         if players_cog and self.minecraft_service:
             logger.info("TEST: Running Minecraft player announcement test...")
             try:
-                from bot.services.minecraft import MinecraftServerStatus
-
                 for server_name in self.minecraft_service.get_server_names():
                     # Get current status
                     status = await self.minecraft_service.get_status(server_name)

@@ -17,7 +17,6 @@ from typing import Any
 from unittest.mock import patch
 
 from bot.config import (
-    Config,
     ConfigurationError,
     DiscordConfig,
     JellyfinConfig,
