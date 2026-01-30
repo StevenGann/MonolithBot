@@ -11,7 +11,15 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-from bot.config import Config, DiscordConfig, JellyfinConfig, JellyfinScheduleConfig
+from bot.config import (
+    Config,
+    DiscordConfig,
+    JellyfinConfig,
+    JellyfinScheduleConfig,
+    MinecraftConfig,
+    MinecraftScheduleConfig,
+    MinecraftServerConfig,
+)
 from bot.services.jellyfin import JellyfinItem, ServerInfo
 
 
@@ -56,14 +64,50 @@ def jellyfin_config(jellyfin_schedule_config: JellyfinScheduleConfig) -> Jellyfi
 
 
 @pytest.fixture
+def minecraft_schedule_config() -> MinecraftScheduleConfig:
+    """Create a mock Minecraft schedule configuration."""
+    return MinecraftScheduleConfig(
+        timezone="America/Los_Angeles",
+        health_check_interval_minutes=1,
+        player_check_interval_seconds=30,
+    )
+
+
+@pytest.fixture
+def minecraft_server_config() -> MinecraftServerConfig:
+    """Create a mock Minecraft server configuration."""
+    return MinecraftServerConfig(
+        name="Survival",
+        urls=["localhost:25565"],
+    )
+
+
+@pytest.fixture
+def minecraft_config(
+    minecraft_schedule_config: MinecraftScheduleConfig,
+    minecraft_server_config: MinecraftServerConfig,
+) -> MinecraftConfig:
+    """Create a mock Minecraft configuration."""
+    return MinecraftConfig(
+        enabled=False,  # Disabled by default in tests
+        announcement_channel_id=111222333,
+        alert_channel_id=444555666,
+        servers=[minecraft_server_config],
+        schedule=minecraft_schedule_config,
+    )
+
+
+@pytest.fixture
 def config(
     discord_config: DiscordConfig,
     jellyfin_config: JellyfinConfig,
+    minecraft_config: MinecraftConfig,
 ) -> Config:
     """Create a complete mock configuration."""
     return Config(
         discord=discord_config,
         jellyfin=jellyfin_config,
+        minecraft=minecraft_config,
     )
 
 
@@ -88,6 +132,26 @@ def config_json() -> dict[str, Any]:
                 "health_check_interval_minutes": 10,
                 "lookback_hours": 48,
                 "max_items_per_type": 5,
+            },
+        },
+        "minecraft": {
+            "enabled": False,
+            "announcement_channel_id": 777888999,
+            "alert_channel_id": 999888777,
+            "servers": [
+                {
+                    "name": "Survival",
+                    "urls": ["mc.example.com:25565", "192.168.1.100:25565"],
+                },
+                {
+                    "name": "Creative",
+                    "urls": ["mc-creative.example.com:25565"],
+                },
+            ],
+            "schedule": {
+                "timezone": "UTC",
+                "health_check_interval_minutes": 2,
+                "player_check_interval_seconds": 15,
             },
         },
     }

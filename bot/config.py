@@ -162,6 +162,77 @@ class JellyfinConfig:
 
 
 @dataclass
+class MinecraftScheduleConfig:
+    """
+    Scheduling configuration for Minecraft-specific tasks.
+
+    Attributes:
+        timezone: IANA timezone name for interpreting times.
+            Example: "America/Los_Angeles", "Europe/London", "UTC"
+        health_check_interval_minutes: How often to check if servers are online.
+            Lower values detect outages faster but increase network traffic.
+        player_check_interval_seconds: How often to poll for player changes.
+            Used for detecting player joins. Lower values = faster announcements
+            but more frequent queries.
+    """
+
+    timezone: str = "America/Los_Angeles"
+    health_check_interval_minutes: int = 1
+    player_check_interval_seconds: int = 30
+
+
+@dataclass
+class MinecraftServerConfig:
+    """
+    Configuration for a single Minecraft server instance.
+
+    Attributes:
+        name: Display name for this server (e.g., "Survival", "Creative").
+            Used in Discord notifications to identify which server.
+        urls: List of server addresses to try in order (for failover).
+            Each should be in "host:port" or "host" format (default port 25565).
+            During health checks, URLs are tried in order until one works.
+    """
+
+    name: str
+    urls: list[str]
+
+    def __post_init__(self) -> None:
+        """Validate server configuration."""
+        if not self.name:
+            raise ValueError("Minecraft server name cannot be empty")
+        if not self.urls:
+            raise ValueError(f"Minecraft server '{self.name}' must have at least one URL")
+
+
+@dataclass
+class MinecraftConfig:
+    """
+    Minecraft server monitoring configuration settings.
+
+    Attributes:
+        enabled: Whether Minecraft integration is enabled.
+        announcement_channel_id: Channel ID for player join announcements.
+        alert_channel_id: Channel ID for server status alerts (online/offline).
+            Defaults to announcement_channel_id if not specified.
+        servers: List of Minecraft server instances to monitor.
+            Each server can have multiple URLs for failover.
+        schedule: Scheduling settings for Minecraft-specific tasks.
+    """
+
+    enabled: bool
+    announcement_channel_id: Optional[int] = None
+    alert_channel_id: Optional[int] = None
+    servers: list[MinecraftServerConfig] = field(default_factory=list)
+    schedule: MinecraftScheduleConfig = field(default_factory=MinecraftScheduleConfig)
+
+    def __post_init__(self) -> None:
+        """Set alert_channel_id to announcement_channel_id if not provided."""
+        if self.alert_channel_id is None:
+            self.alert_channel_id = self.announcement_channel_id
+
+
+@dataclass
 class Config:
     """
     Main configuration container aggregating all settings.
@@ -172,6 +243,7 @@ class Config:
     Attributes:
         discord: Discord bot and channel settings.
         jellyfin: Jellyfin server connection and schedule settings.
+        minecraft: Minecraft server monitoring settings.
 
     Example:
         >>> config = load_config(Path("config.json"))
@@ -181,10 +253,13 @@ class Config:
         ['17:00']
         >>> print(config.jellyfin.content_types)
         ['Movie', 'Series', 'Audio']
+        >>> print(config.minecraft.servers[0].name)
+        'Survival'
     """
 
     discord: DiscordConfig
     jellyfin: JellyfinConfig
+    minecraft: MinecraftConfig
 
 
 # =============================================================================
@@ -526,6 +601,154 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
     )
 
 
+def _build_minecraft_schedule_config(
+    schedule_json: dict[str, Any],
+) -> MinecraftScheduleConfig:
+    """
+    Build Minecraft schedule configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+    All schedule settings have sensible defaults.
+
+    Args:
+        schedule_json: Parsed JSON schedule configuration dictionary.
+
+    Returns:
+        Populated MinecraftScheduleConfig object.
+
+    Environment Variables:
+        - MINECRAFT_SCHEDULE_TIMEZONE: IANA timezone name
+        - MINECRAFT_SCHEDULE_HEALTH_CHECK_INTERVAL: Minutes between health checks
+        - MINECRAFT_SCHEDULE_PLAYER_CHECK_INTERVAL: Seconds between player checks
+    """
+    timezone = _get_env("MINECRAFT_SCHEDULE_TIMEZONE") or schedule_json.get(
+        "timezone", "America/Los_Angeles"
+    )
+
+    health_check_interval = _get_env_int(
+        "MINECRAFT_SCHEDULE_HEALTH_CHECK_INTERVAL"
+    ) or schedule_json.get("health_check_interval_minutes", 1)
+
+    player_check_interval = _get_env_int(
+        "MINECRAFT_SCHEDULE_PLAYER_CHECK_INTERVAL"
+    ) or schedule_json.get("player_check_interval_seconds", 30)
+
+    return MinecraftScheduleConfig(
+        timezone=timezone,
+        health_check_interval_minutes=health_check_interval,
+        player_check_interval_seconds=player_check_interval,
+    )
+
+
+def _build_minecraft_server_config(server_json: dict[str, Any]) -> MinecraftServerConfig:
+    """
+    Build a single Minecraft server configuration from JSON.
+
+    Args:
+        server_json: Dictionary containing server name and urls.
+
+    Returns:
+        Populated MinecraftServerConfig object.
+
+    Raises:
+        ConfigurationError: If name or urls are missing/invalid.
+    """
+    name = server_json.get("name")
+    if not name:
+        raise ConfigurationError(
+            "Each Minecraft server must have a 'name' field"
+        )
+
+    urls = server_json.get("urls", [])
+    if not urls:
+        # Also check for single "url" string for convenience
+        url = server_json.get("url")
+        if url:
+            urls = [url] if isinstance(url, str) else url
+        else:
+            raise ConfigurationError(
+                f"Minecraft server '{name}' must have 'urls' (list) or 'url' (string)"
+            )
+
+    return MinecraftServerConfig(name=name, urls=urls)
+
+
+def _build_minecraft_config(json_config: dict[str, Any]) -> MinecraftConfig:
+    """
+    Build Minecraft configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        Populated MinecraftConfig object.
+
+    Raises:
+        ConfigurationError: If Minecraft is enabled but required values
+            (announcement_channel_id, servers) are not properly configured.
+
+    Environment Variables:
+        - MINECRAFT_ENABLED: Whether Minecraft integration is enabled
+        - MINECRAFT_ANNOUNCEMENT_CHANNEL_ID: Channel for player join announcements
+        - MINECRAFT_ALERT_CHANNEL_ID: Channel for server status alerts
+
+    Note: Server configuration must be done via JSON config file as it requires
+    complex nested structures. Environment variables can override channel IDs
+    and schedule settings.
+    """
+    minecraft_json = json_config.get("minecraft", {})
+
+    # Check if enabled (defaults to False since it's a new feature)
+    enabled_env = _get_env_bool("MINECRAFT_ENABLED")
+    enabled = (
+        enabled_env if enabled_env is not None else minecraft_json.get("enabled", False)
+    )
+
+    # Channel IDs
+    announcement_channel_id = _get_env_int(
+        "MINECRAFT_ANNOUNCEMENT_CHANNEL_ID"
+    ) or minecraft_json.get("announcement_channel_id")
+
+    alert_channel_id = _get_env_int(
+        "MINECRAFT_ALERT_CHANNEL_ID"
+    ) or minecraft_json.get("alert_channel_id")
+
+    # Validate channels if enabled
+    if enabled and not announcement_channel_id:
+        raise ConfigurationError(
+            "Minecraft announcement channel ID is required when enabled. "
+            "Set MINECRAFT_ANNOUNCEMENT_CHANNEL_ID environment variable or "
+            "'minecraft.announcement_channel_id' in config.json"
+        )
+
+    # Build server configs from JSON (no env var support for server list)
+    servers_json = minecraft_json.get("servers", [])
+    servers: list[MinecraftServerConfig] = []
+
+    for server_json in servers_json:
+        servers.append(_build_minecraft_server_config(server_json))
+
+    if enabled and not servers:
+        raise ConfigurationError(
+            "At least one Minecraft server must be configured when enabled. "
+            "Add servers to 'minecraft.servers' in config.json"
+        )
+
+    # Build nested schedule config
+    schedule_json = minecraft_json.get("schedule", {})
+    schedule_config = _build_minecraft_schedule_config(schedule_json)
+
+    return MinecraftConfig(
+        enabled=enabled,
+        announcement_channel_id=announcement_channel_id,
+        alert_channel_id=alert_channel_id,
+        servers=servers,
+        schedule=schedule_config,
+    )
+
+
 # =============================================================================
 # Public API
 # =============================================================================
@@ -564,6 +787,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         >>> print(config.jellyfin.url)
         >>> print(config.jellyfin.schedule.announcement_times)
         >>> print(config.jellyfin.content_types)
+        >>> print(config.minecraft.servers[0].name)
     """
     if config_path is None:
         config_path = Path("config.json")
@@ -574,8 +798,10 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     # Build each configuration section
     discord_config = _build_discord_config(json_config)
     jellyfin_config = _build_jellyfin_config(json_config)
+    minecraft_config = _build_minecraft_config(json_config)
 
     return Config(
         discord=discord_config,
         jellyfin=jellyfin_config,
+        minecraft=minecraft_config,
     )

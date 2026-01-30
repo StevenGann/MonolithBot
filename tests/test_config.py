@@ -22,6 +22,9 @@ from bot.config import (
     DiscordConfig,
     JellyfinConfig,
     JellyfinScheduleConfig,
+    MinecraftConfig,
+    MinecraftScheduleConfig,
+    MinecraftServerConfig,
     load_config,
     _get_env,
     _get_env_bool,
@@ -31,6 +34,9 @@ from bot.config import (
     _build_discord_config,
     _build_jellyfin_config,
     _build_jellyfin_schedule_config,
+    _build_minecraft_config,
+    _build_minecraft_schedule_config,
+    _build_minecraft_server_config,
 )
 
 
@@ -560,3 +566,408 @@ class TestLoadConfig:
             config = load_config(config_path)
 
         assert config.jellyfin.enabled is False
+
+
+# =============================================================================
+# MinecraftScheduleConfig Tests
+# =============================================================================
+
+
+class TestMinecraftScheduleConfig:
+    """Tests for MinecraftScheduleConfig dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test default values for schedule config."""
+        config = MinecraftScheduleConfig()
+        assert config.timezone == "America/Los_Angeles"
+        assert config.health_check_interval_minutes == 1
+        assert config.player_check_interval_seconds == 30
+
+    def test_custom_values(self) -> None:
+        """Test custom values for schedule config."""
+        config = MinecraftScheduleConfig(
+            timezone="UTC",
+            health_check_interval_minutes=5,
+            player_check_interval_seconds=15,
+        )
+        assert config.timezone == "UTC"
+        assert config.health_check_interval_minutes == 5
+        assert config.player_check_interval_seconds == 15
+
+
+# =============================================================================
+# MinecraftServerConfig Tests
+# =============================================================================
+
+
+class TestMinecraftServerConfig:
+    """Tests for MinecraftServerConfig dataclass."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating server config with required fields."""
+        config = MinecraftServerConfig(
+            name="Survival",
+            urls=["localhost:25565"],
+        )
+        assert config.name == "Survival"
+        assert config.urls == ["localhost:25565"]
+
+    def test_multiple_urls(self) -> None:
+        """Test server config with multiple URLs for failover."""
+        config = MinecraftServerConfig(
+            name="Survival",
+            urls=["mc.example.com:25565", "192.168.1.100:25565", "backup.local:25565"],
+        )
+        assert len(config.urls) == 3
+        assert config.urls[0] == "mc.example.com:25565"
+
+    def test_empty_name_raises_error(self) -> None:
+        """Test that empty server name raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            MinecraftServerConfig(name="", urls=["localhost:25565"])
+        assert "name cannot be empty" in str(exc_info.value)
+
+    def test_empty_urls_raises_error(self) -> None:
+        """Test that empty URLs list raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            MinecraftServerConfig(name="Survival", urls=[])
+        assert "must have at least one URL" in str(exc_info.value)
+
+
+# =============================================================================
+# MinecraftConfig Tests
+# =============================================================================
+
+
+class TestMinecraftConfig:
+    """Tests for MinecraftConfig dataclass."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating MinecraftConfig with required fields."""
+        config = MinecraftConfig(
+            enabled=True,
+            announcement_channel_id=123456789,
+            alert_channel_id=987654321,
+            servers=[MinecraftServerConfig(name="Survival", urls=["localhost:25565"])],
+        )
+        assert config.enabled is True
+        assert config.announcement_channel_id == 123456789
+        assert config.alert_channel_id == 987654321
+        assert len(config.servers) == 1
+
+    def test_alert_channel_defaults_to_announcement(self) -> None:
+        """Test that alert_channel_id defaults to announcement_channel_id."""
+        config = MinecraftConfig(
+            enabled=True,
+            announcement_channel_id=123456789,
+            servers=[MinecraftServerConfig(name="Survival", urls=["localhost:25565"])],
+        )
+        assert config.alert_channel_id == 123456789
+
+    def test_disabled_by_default(self) -> None:
+        """Test that Minecraft is disabled by default when channels are None."""
+        config = MinecraftConfig(enabled=False)
+        assert config.enabled is False
+        assert config.servers == []
+
+    def test_multiple_servers(self) -> None:
+        """Test config with multiple server instances."""
+        config = MinecraftConfig(
+            enabled=True,
+            announcement_channel_id=123456789,
+            servers=[
+                MinecraftServerConfig(name="Survival", urls=["mc1.example.com:25565"]),
+                MinecraftServerConfig(name="Creative", urls=["mc2.example.com:25565"]),
+                MinecraftServerConfig(name="Minigames", urls=["mc3.example.com:25565"]),
+            ],
+        )
+        assert len(config.servers) == 3
+        assert config.servers[0].name == "Survival"
+        assert config.servers[1].name == "Creative"
+        assert config.servers[2].name == "Minigames"
+
+
+# =============================================================================
+# Build Minecraft Schedule Config Tests
+# =============================================================================
+
+
+class TestBuildMinecraftScheduleConfig:
+    """Tests for _build_minecraft_schedule_config function."""
+
+    def test_loads_from_json(self) -> None:
+        """Test loading schedule config from JSON."""
+        schedule_json = {
+            "timezone": "Europe/London",
+            "health_check_interval_minutes": 2,
+            "player_check_interval_seconds": 10,
+        }
+
+        with patch.dict(os.environ, {}, clear=True):
+            config = _build_minecraft_schedule_config(schedule_json)
+
+        assert config.timezone == "Europe/London"
+        assert config.health_check_interval_minutes == 2
+        assert config.player_check_interval_seconds == 10
+
+    def test_env_vars_override_json(self) -> None:
+        """Test that environment variables override JSON values."""
+        schedule_json = {
+            "timezone": "Europe/London",
+            "health_check_interval_minutes": 2,
+            "player_check_interval_seconds": 10,
+        }
+        env_vars = {
+            "MINECRAFT_SCHEDULE_TIMEZONE": "UTC",
+            "MINECRAFT_SCHEDULE_HEALTH_CHECK_INTERVAL": "5",
+            "MINECRAFT_SCHEDULE_PLAYER_CHECK_INTERVAL": "60",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = _build_minecraft_schedule_config(schedule_json)
+
+        assert config.timezone == "UTC"
+        assert config.health_check_interval_minutes == 5
+        assert config.player_check_interval_seconds == 60
+
+    def test_uses_defaults_when_not_specified(self) -> None:
+        """Test default values when nothing is specified."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = _build_minecraft_schedule_config({})
+
+        assert config.timezone == "America/Los_Angeles"
+        assert config.health_check_interval_minutes == 1
+        assert config.player_check_interval_seconds == 30
+
+
+# =============================================================================
+# Build Minecraft Server Config Tests
+# =============================================================================
+
+
+class TestBuildMinecraftServerConfig:
+    """Tests for _build_minecraft_server_config function."""
+
+    def test_loads_server_with_urls_list(self) -> None:
+        """Test loading server config with urls list."""
+        server_json = {
+            "name": "Survival",
+            "urls": ["mc.example.com:25565", "backup.local:25565"],
+        }
+
+        config = _build_minecraft_server_config(server_json)
+
+        assert config.name == "Survival"
+        assert config.urls == ["mc.example.com:25565", "backup.local:25565"]
+
+    def test_loads_server_with_single_url(self) -> None:
+        """Test loading server config with single url string."""
+        server_json = {
+            "name": "Creative",
+            "url": "mc.example.com:25565",
+        }
+
+        config = _build_minecraft_server_config(server_json)
+
+        assert config.name == "Creative"
+        assert config.urls == ["mc.example.com:25565"]
+
+    def test_missing_name_raises_error(self) -> None:
+        """Test that missing name raises ConfigurationError."""
+        server_json = {"urls": ["localhost:25565"]}
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            _build_minecraft_server_config(server_json)
+
+        assert "must have a 'name' field" in str(exc_info.value)
+
+    def test_missing_urls_raises_error(self) -> None:
+        """Test that missing urls raises ConfigurationError."""
+        server_json = {"name": "Survival"}
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            _build_minecraft_server_config(server_json)
+
+        assert "must have 'urls'" in str(exc_info.value)
+
+
+# =============================================================================
+# Build Minecraft Config Tests
+# =============================================================================
+
+
+class TestBuildMinecraftConfig:
+    """Tests for _build_minecraft_config function."""
+
+    def test_loads_complete_config_from_json(self) -> None:
+        """Test loading complete Minecraft config from JSON."""
+        json_config = {
+            "minecraft": {
+                "enabled": True,
+                "announcement_channel_id": 123456789,
+                "alert_channel_id": 987654321,
+                "servers": [
+                    {
+                        "name": "Survival",
+                        "urls": ["mc.example.com:25565"],
+                    }
+                ],
+                "schedule": {
+                    "timezone": "UTC",
+                    "health_check_interval_minutes": 2,
+                    "player_check_interval_seconds": 15,
+                },
+            }
+        }
+
+        with patch.dict(os.environ, {}, clear=True):
+            config = _build_minecraft_config(json_config)
+
+        assert config.enabled is True
+        assert config.announcement_channel_id == 123456789
+        assert config.alert_channel_id == 987654321
+        assert len(config.servers) == 1
+        assert config.servers[0].name == "Survival"
+        assert config.schedule.timezone == "UTC"
+
+    def test_disabled_by_default(self) -> None:
+        """Test that Minecraft is disabled by default."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = _build_minecraft_config({})
+
+        assert config.enabled is False
+
+    def test_env_vars_override_channel_ids(self) -> None:
+        """Test that environment variables override channel IDs."""
+        json_config = {
+            "minecraft": {
+                "enabled": True,
+                "announcement_channel_id": 111,
+                "alert_channel_id": 222,
+                "servers": [{"name": "Test", "urls": ["localhost:25565"]}],
+            }
+        }
+        env_vars = {
+            "MINECRAFT_ANNOUNCEMENT_CHANNEL_ID": "999",
+            "MINECRAFT_ALERT_CHANNEL_ID": "888",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = _build_minecraft_config(json_config)
+
+        assert config.announcement_channel_id == 999
+        assert config.alert_channel_id == 888
+
+    def test_enabled_without_channel_raises_error(self) -> None:
+        """Test that enabling without channel ID raises error."""
+        json_config = {
+            "minecraft": {
+                "enabled": True,
+                "servers": [{"name": "Test", "urls": ["localhost:25565"]}],
+            }
+        }
+
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ConfigurationError) as exc_info:
+                _build_minecraft_config(json_config)
+
+        assert "announcement channel ID is required" in str(exc_info.value)
+
+    def test_enabled_without_servers_raises_error(self) -> None:
+        """Test that enabling without servers raises error."""
+        json_config = {
+            "minecraft": {
+                "enabled": True,
+                "announcement_channel_id": 123456789,
+            }
+        }
+
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ConfigurationError) as exc_info:
+                _build_minecraft_config(json_config)
+
+        assert "At least one Minecraft server must be configured" in str(exc_info.value)
+
+    def test_enabled_via_env(self) -> None:
+        """Test enabling Minecraft via environment variable."""
+        json_config = {
+            "minecraft": {
+                "announcement_channel_id": 123456789,
+                "servers": [{"name": "Test", "urls": ["localhost:25565"]}],
+            }
+        }
+        env_vars = {"MINECRAFT_ENABLED": "true"}
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = _build_minecraft_config(json_config)
+
+        assert config.enabled is True
+
+    def test_multiple_servers(self) -> None:
+        """Test loading config with multiple servers."""
+        json_config = {
+            "minecraft": {
+                "enabled": True,
+                "announcement_channel_id": 123456789,
+                "servers": [
+                    {"name": "Survival", "urls": ["mc1.example.com:25565"]},
+                    {"name": "Creative", "urls": ["mc2.example.com:25565"]},
+                    {"name": "Minigames", "urls": ["mc3.example.com:25565", "backup:25565"]},
+                ],
+            }
+        }
+
+        with patch.dict(os.environ, {}, clear=True):
+            config = _build_minecraft_config(json_config)
+
+        assert len(config.servers) == 3
+        assert config.servers[0].name == "Survival"
+        assert config.servers[1].name == "Creative"
+        assert config.servers[2].name == "Minigames"
+        assert len(config.servers[2].urls) == 2
+
+
+# =============================================================================
+# Load Config with Minecraft Tests
+# =============================================================================
+
+
+class TestLoadConfigWithMinecraft:
+    """Tests for load_config function including Minecraft configuration."""
+
+    def test_loads_minecraft_from_json(
+        self, temp_config_file: Path, config_json: dict[str, Any]
+    ) -> None:
+        """Test that Minecraft config is loaded from JSON file."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = load_config(temp_config_file)
+
+        assert config.minecraft.enabled == config_json["minecraft"]["enabled"]
+        assert (
+            config.minecraft.announcement_channel_id
+            == config_json["minecraft"]["announcement_channel_id"]
+        )
+        assert len(config.minecraft.servers) == 2
+        assert config.minecraft.servers[0].name == "Survival"
+
+    def test_minecraft_disabled_in_minimal_config(self, tmp_path: Path) -> None:
+        """Test that Minecraft is disabled when not in config."""
+        minimal_json = {
+            "discord": {
+                "token": "test-token",
+                "announcement_channel_id": 123456789,
+            },
+            "jellyfin": {
+                "url": "http://localhost:8096",
+                "api_key": "test-key",
+            },
+        }
+        config_path = tmp_path / "config.json"
+        with open(config_path, "w") as f:
+            json.dump(minimal_json, f)
+
+        with patch.dict(os.environ, {}, clear=True):
+            config = load_config(config_path)
+
+        assert config.minecraft.enabled is False
+        assert config.minecraft.servers == []

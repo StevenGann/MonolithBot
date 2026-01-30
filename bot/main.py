@@ -1,5 +1,5 @@
 """
-MonolithBot - Discord bot for Jellyfin server monitoring and announcements.
+MonolithBot - Discord bot for Jellyfin and Minecraft server monitoring.
 
 This module serves as the entry point for MonolithBot, handling:
 - Command-line argument parsing
@@ -8,18 +8,21 @@ This module serves as the entry point for MonolithBot, handling:
 - Graceful shutdown on SIGINT/SIGTERM
 
 Usage:
-    python -m bot.main                      # Run with default config.json
-    python -m bot.main --config my.json     # Run with custom config file
-    python -m bot.main --verbose            # Run with debug logging
-    python -m bot.main --test               # Run all test modes on startup
-    python -m bot.main --test-health        # Run health check test on startup
-    python -m bot.main --test-announcement  # Run announcement test on startup
+    python -m bot.main                        # Run with default config.json
+    python -m bot.main --config my.json       # Run with custom config file
+    python -m bot.main --verbose              # Run with debug logging
+    python -m bot.main --test                 # Run all test modes on startup
+    python -m bot.main --test-health          # Run Jellyfin health check test
+    python -m bot.main --test-announcement    # Run Jellyfin announcement test
+    python -m bot.main --test-minecraft       # Run Minecraft health check test
 
 See Also:
     - bot.config: Configuration loading and validation
     - bot.cogs.jellyfin.announcements: Scheduled content announcements
-    - bot.cogs.jellyfin.health: Server health monitoring
+    - bot.cogs.jellyfin.health: Jellyfin server health monitoring
     - bot.cogs.jellyfin.suggestions: Random content suggestions
+    - bot.cogs.minecraft.health: Minecraft server health monitoring
+    - bot.cogs.minecraft.players: Minecraft player join announcements
 """
 
 import argparse
@@ -35,6 +38,7 @@ from discord.ext import commands
 
 from bot.config import Config, ConfigurationError, load_config
 from bot.services.jellyfin import JellyfinService
+from bot.services.minecraft import MinecraftService
 
 if TYPE_CHECKING:
     pass
@@ -52,39 +56,51 @@ class TestModes:
     useful for testing without waiting for scheduled times.
 
     Attributes:
-        health: If True, run health check and send notification on startup.
-        announcement: If True, run content announcement on startup.
-        suggestion: If True, run random suggestions on startup.
+        jf_health: If True, run Jellyfin health check and send notification on startup.
+        jf_announcement: If True, run Jellyfin content announcement on startup.
+        jf_suggestion: If True, run Jellyfin random suggestions on startup.
+        mc_health: If True, run Minecraft health check test on startup.
+        mc_announce: If True, run Minecraft player announcement test on startup.
     """
 
-    health: bool = False
-    announcement: bool = False
-    suggestion: bool = False
+    jf_health: bool = False
+    jf_announcement: bool = False
+    jf_suggestion: bool = False
+    mc_health: bool = False
+    mc_announce: bool = False
 
     @property
     def any_enabled(self) -> bool:
         """Check if any test mode is enabled."""
-        return self.health or self.announcement or self.suggestion
+        return (
+            self.jf_health
+            or self.jf_announcement
+            or self.jf_suggestion
+            or self.mc_health
+            or self.mc_announce
+        )
 
     @classmethod
     def all_enabled(cls) -> "TestModes":
         """Create a TestModes instance with all modes enabled."""
-        return cls(health=True, announcement=True, suggestion=True)
+        return cls(jf_health=True, jf_announcement=True, jf_suggestion=True, mc_health=True, mc_announce=True)
 
 
 class MonolithBot(commands.Bot):
     """
     Main Discord bot class for MonolithBot.
 
-    Extends discord.py's Bot class with Jellyfin monitoring capabilities.
+    Extends discord.py's Bot class with Jellyfin and Minecraft monitoring.
     Configuration is stored on the instance and accessible to all cogs
     via `self.bot.config`.
 
     Attributes:
         config: The loaded configuration object containing Discord,
-            Jellyfin, and scheduling settings.
-        jellyfin_service: Shared JellyfinService instance for all cogs.
+            Jellyfin, Minecraft, and scheduling settings.
+        jellyfin_service: Shared JellyfinService instance for Jellyfin cogs.
             None if Jellyfin integration is disabled.
+        minecraft_service: Shared MinecraftService instance for Minecraft cogs.
+            None if Minecraft integration is disabled.
         test_modes: TestModes instance controlling which tests run on startup.
         test_mode: Convenience property that returns True if any test mode is enabled.
 
@@ -124,8 +140,9 @@ class MonolithBot(commands.Bot):
         self._test_modes = test_modes or TestModes()
         self._shutdown_event = asyncio.Event()
 
-        # Shared Jellyfin service instance (initialized in setup_hook if enabled)
+        # Shared service instances (initialized in setup_hook if enabled)
         self.jellyfin_service: Optional[JellyfinService] = None
+        self.minecraft_service: Optional[MinecraftService] = None
 
     @property
     def test_mode(self) -> bool:
@@ -159,6 +176,14 @@ class MonolithBot(commands.Bot):
                 f"Jellyfin service initialized with {len(self.config.jellyfin.urls)} URL(s)"
             )
 
+        if self.config.minecraft.enabled:
+            self.minecraft_service = MinecraftService(
+                servers=self.config.minecraft.servers,
+            )
+            logger.info(
+                f"Minecraft service initialized with {len(self.config.minecraft.servers)} server(s)"
+            )
+
         logger.info("Loading cogs...")
 
         # List of cog modules to load
@@ -174,6 +199,15 @@ class MonolithBot(commands.Bot):
             logger.info("Jellyfin integration enabled - loading Jellyfin cogs")
         else:
             logger.info("Jellyfin integration disabled - skipping Jellyfin cogs")
+
+        if self.config.minecraft.enabled:
+            cogs_to_load.extend([
+                "bot.cogs.minecraft.health",
+                "bot.cogs.minecraft.players",
+            ])
+            logger.info("Minecraft integration enabled - loading Minecraft cogs")
+        else:
+            logger.info("Minecraft integration disabled - skipping Minecraft cogs")
 
         for cog in cogs_to_load:
             try:
@@ -248,33 +282,48 @@ class MonolithBot(commands.Bot):
         mode runs independently based on its flag.
         """
         enabled_modes = []
-        if self._test_modes.health:
-            enabled_modes.append("health")
-        if self._test_modes.announcement:
-            enabled_modes.append("announcement")
-        if self._test_modes.suggestion:
-            enabled_modes.append("suggestion")
+        if self._test_modes.jf_health:
+            enabled_modes.append("jf-health")
+        if self._test_modes.jf_announcement:
+            enabled_modes.append("jf-announcement")
+        if self._test_modes.jf_suggestion:
+            enabled_modes.append("jf-suggestion")
+        if self._test_modes.mc_health:
+            enabled_modes.append("mc-health")
+        if self._test_modes.mc_announce:
+            enabled_modes.append("mc-announce")
 
         logger.info(f"=== TEST MODE: Running {', '.join(enabled_modes)} ===")
 
-    # Run Jellyfin tests if enabled
+        # Run Jellyfin tests if enabled
         if self.config.jellyfin.enabled:
-            if self._test_modes.health:
-                await self._run_health_test()
+            if self._test_modes.jf_health:
+                await self._run_jf_health_test()
 
-            if self._test_modes.announcement:
-                await self._run_announcement_test()
+            if self._test_modes.jf_announcement:
+                await self._run_jf_announcement_test()
 
-            if self._test_modes.suggestion:
-                await self._run_suggestion_test()
+            if self._test_modes.jf_suggestion:
+                await self._run_jf_suggestion_test()
         else:
-            if self._test_modes.any_enabled:
+            if self._test_modes.jf_health or self._test_modes.jf_announcement or self._test_modes.jf_suggestion:
                 logger.warning("Jellyfin is disabled - skipping Jellyfin test modes")
+
+        # Run Minecraft tests if enabled
+        if self.config.minecraft.enabled:
+            if self._test_modes.mc_health:
+                await self._run_mc_health_test()
+
+            if self._test_modes.mc_announce:
+                await self._run_mc_announce_test()
+        else:
+            if self._test_modes.mc_health or self._test_modes.mc_announce:
+                logger.warning("Minecraft is disabled - skipping Minecraft test modes")
 
         logger.info("=== TEST MODE COMPLETE ===")
 
-    async def _run_health_test(self) -> None:
-        """Run health check test and send notification."""
+    async def _run_jf_health_test(self) -> None:
+        """Run Jellyfin health check test and send notification."""
         health_cog = self.get_cog("JellyfinHealth")
         if health_cog:
             logger.info("TEST: Sending health status notification...")
@@ -294,8 +343,8 @@ class MonolithBot(commands.Bot):
         else:
             logger.warning("TEST: JellyfinHealth cog not loaded")
 
-    async def _run_announcement_test(self) -> None:
-        """Run content announcement test."""
+    async def _run_jf_announcement_test(self) -> None:
+        """Run Jellyfin content announcement test."""
         announcements_cog = self.get_cog("JellyfinAnnouncements")
         if announcements_cog:
             logger.info("TEST: Running content announcement...")
@@ -307,8 +356,8 @@ class MonolithBot(commands.Bot):
         else:
             logger.warning("TEST: JellyfinAnnouncements cog not loaded")
 
-    async def _run_suggestion_test(self) -> None:
-        """Run random suggestion test."""
+    async def _run_jf_suggestion_test(self) -> None:
+        """Run Jellyfin random suggestion test."""
         suggestions_cog = self.get_cog("JellyfinSuggestions")
         if suggestions_cog:
             logger.info("TEST: Running random suggestions...")
@@ -319,6 +368,51 @@ class MonolithBot(commands.Bot):
                 logger.error(f"TEST: Suggestion failed: {e}")
         else:
             logger.warning("TEST: JellyfinSuggestions cog not loaded")
+
+    async def _run_mc_health_test(self) -> None:
+        """Run Minecraft health check test."""
+        health_cog = self.get_cog("MinecraftHealth")
+        if health_cog and self.minecraft_service:
+            logger.info("TEST: Running Minecraft health checks...")
+            try:
+                for server_name in self.minecraft_service.get_server_names():
+                    status = await self.minecraft_service.check_health(server_name)
+                    state = self.minecraft_service.get_server_state(server_name)
+                    active_url = state.active_url if state else "unknown"
+                    logger.info(
+                        f"TEST: {server_name}: {status.player_count}/{status.max_players} players, "
+                        f"v{status.version} (via {active_url})"
+                    )
+                    await health_cog._send_online_notification(server_name, status, None)
+                logger.info("TEST: Minecraft health checks complete!")
+            except Exception as e:
+                logger.error(f"TEST: Minecraft health check failed: {e}")
+        else:
+            logger.warning("TEST: MinecraftHealth cog not loaded or service unavailable")
+
+    async def _run_mc_announce_test(self) -> None:
+        """Run Minecraft player announcement test."""
+        players_cog = self.get_cog("MinecraftPlayers")
+        if players_cog and self.minecraft_service:
+            logger.info("TEST: Running Minecraft player announcement test...")
+            try:
+                from bot.services.minecraft import MinecraftServerStatus
+
+                for server_name in self.minecraft_service.get_server_names():
+                    # Get current status
+                    status = await self.minecraft_service.get_status(server_name)
+
+                    # Simulate a test player join announcement
+                    test_players = {"TestPlayer"}
+                    logger.info(f"TEST: Simulating player join on {server_name}...")
+                    await players_cog._send_join_announcement(
+                        server_name, test_players, status
+                    )
+                logger.info("TEST: Minecraft player announcements complete!")
+            except Exception as e:
+                logger.error(f"TEST: Minecraft player announcement failed: {e}")
+        else:
+            logger.warning("TEST: MinecraftPlayers cog not loaded or service unavailable")
 
     async def shutdown(self) -> None:
         """
@@ -331,10 +425,14 @@ class MonolithBot(commands.Bot):
         logger.info("Shutting down MonolithBot...")
         self._shutdown_event.set()
 
-        # Close shared Jellyfin service
+        # Close shared services
         if self.jellyfin_service:
             await self.jellyfin_service.close()
             logger.info("Jellyfin service closed")
+
+        # MinecraftService doesn't need explicit close (no persistent connections)
+        if self.minecraft_service:
+            logger.info("Minecraft service stopped")
 
         await self.close()
 
@@ -383,15 +481,17 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="MonolithBot - Discord bot for Jellyfin monitoring",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+epilog="""
 Examples:
-  python -m bot.main                      Run with default config.json
-  python -m bot.main --config my.json     Run with custom config file
-  python -m bot.main --verbose            Run with debug logging
-  python -m bot.main --test               Run all test modes on startup
-  python -m bot.main --test-health        Run health check test only
-  python -m bot.main --test-announcement  Run announcement test only
-  python -m bot.main --test-suggestion    Run suggestion test only
+  python -m bot.main                         Run with default config.json
+  python -m bot.main --config my.json        Run with custom config file
+  python -m bot.main --verbose               Run with debug logging
+  python -m bot.main --test                  Run all test modes on startup
+  python -m bot.main --test-jellyfin         Run all Jellyfin test modes
+  python -m bot.main --test-jf-health        Run Jellyfin health check test
+  python -m bot.main --test-minecraft        Run all Minecraft test modes
+  python -m bot.main --test-mc-health        Run Minecraft health check test
+  python -m bot.main --test-mc-announce      Run Minecraft player announcement test
         """,
     )
 
@@ -420,25 +520,49 @@ Examples:
         "--test",
         "-t",
         action="store_true",
-        help="Run all test modes (health check + announcement + suggestion)",
+        help="Run all test modes (Jellyfin + Minecraft)",
     )
 
     test_group.add_argument(
-        "--test-health",
+        "--test-jellyfin",
         action="store_true",
-        help="Run health check and send notification on startup",
+        help="Run all Jellyfin test modes (health + announcement + suggestion)",
     )
 
     test_group.add_argument(
-        "--test-announcement",
+        "--test-jf-health",
         action="store_true",
-        help="Run content announcement on startup",
+        help="Run Jellyfin health check and send notification on startup",
     )
 
     test_group.add_argument(
-        "--test-suggestion",
+        "--test-jf-announcement",
         action="store_true",
-        help="Run random suggestions on startup",
+        help="Run Jellyfin content announcement on startup",
+    )
+
+    test_group.add_argument(
+        "--test-jf-suggestion",
+        action="store_true",
+        help="Run Jellyfin random suggestions on startup",
+    )
+
+    test_group.add_argument(
+        "--test-minecraft",
+        action="store_true",
+        help="Run all Minecraft test modes (health + announce)",
+    )
+
+    test_group.add_argument(
+        "--test-mc-health",
+        action="store_true",
+        help="Run Minecraft health check on startup",
+    )
+
+    test_group.add_argument(
+        "--test-mc-announce",
+        action="store_true",
+        help="Run Minecraft player announcement test on startup",
     )
 
     return parser.parse_args()
@@ -458,11 +582,28 @@ def build_test_modes(args: argparse.Namespace) -> TestModes:
     if args.test:
         return TestModes.all_enabled()
 
-    # Otherwise, enable individual test modes as specified
+    # If --test-jellyfin is set, enable all Jellyfin test modes
+    jf_health = args.test_jf_health
+    jf_announcement = args.test_jf_announcement
+    jf_suggestion = args.test_jf_suggestion
+    if args.test_jellyfin:
+        jf_health = True
+        jf_announcement = True
+        jf_suggestion = True
+
+    # If --test-minecraft is set, enable all Minecraft test modes
+    mc_health = args.test_mc_health
+    mc_announce = args.test_mc_announce
+    if args.test_minecraft:
+        mc_health = True
+        mc_announce = True
+
     return TestModes(
-        health=args.test_health,
-        announcement=args.test_announcement,
-        suggestion=args.test_suggestion,
+        jf_health=jf_health,
+        jf_announcement=jf_announcement,
+        jf_suggestion=jf_suggestion,
+        mc_health=mc_health,
+        mc_announce=mc_announce,
     )
 
 
@@ -551,12 +692,16 @@ def main() -> NoReturn | None:
     test_modes = build_test_modes(args)
     if test_modes.any_enabled:
         enabled = []
-        if test_modes.health:
-            enabled.append("health")
-        if test_modes.announcement:
-            enabled.append("announcement")
-        if test_modes.suggestion:
-            enabled.append("suggestion")
+        if test_modes.jf_health:
+            enabled.append("jf-health")
+        if test_modes.jf_announcement:
+            enabled.append("jf-announcement")
+        if test_modes.jf_suggestion:
+            enabled.append("jf-suggestion")
+        if test_modes.mc_health:
+            enabled.append("mc-health")
+        if test_modes.mc_announce:
+            enabled.append("mc-announce")
         logger.info(f"Test modes enabled: {', '.join(enabled)}")
 
     # Run the bot

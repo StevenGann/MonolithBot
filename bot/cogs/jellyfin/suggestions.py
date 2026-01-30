@@ -40,12 +40,12 @@ Suggestion Structure:
     ```
 
 Slash Commands:
-    /suggest - Get random suggestions for all types (movie, show, album)
-    /suggest movie - Get a random movie suggestion
-    /suggest show - Get a random TV show suggestion
-    /suggest episode - Get a random episode suggestion
-    /suggest album - Get a random album suggestion
-    /suggest song - Get a random song suggestion
+    /jf-suggest - Get random suggestions for all types (movie, show, album)
+    /jf-suggest movie - Get a random movie suggestion
+    /jf-suggest show - Get a random TV show suggestion
+    /jf-suggest episode - Get a random episode suggestion
+    /jf-suggest album - Get a random album suggestion
+    /jf-suggest song - Get a random song suggestion
 
 Configuration:
     Uses these settings from bot.config:
@@ -145,7 +145,7 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
     Example:
         The cog is automatically loaded. Commands available:
 
-        >>> /suggest  # Get random suggestions
+        >>> /jf-suggest  # Get random suggestions
     """
 
     def __init__(self, bot: "MonolithBot") -> None:
@@ -395,8 +395,8 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
     # -------------------------------------------------------------------------
 
     @app_commands.command(
-        name="suggest",
-        description="Get a random content suggestion from the library",
+        name="jf-suggest",
+        description="Get a random content suggestion from Jellyfin",
     )
     @app_commands.describe(
         content_type="Type of content to suggest (leave empty for all types)"

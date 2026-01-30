@@ -17,5 +17,25 @@
       "lookback_hours": 24,
       "max_items_per_type": 10
     }
+  },
+  "minecraft": {
+    "enabled": true,
+    "announcement_channel_id": 123456789012345678,
+    "alert_channel_id": 123456789012345678,
+    "servers": [
+      {
+        "name": "Survival",
+        "urls": ["mc.example.com:25565", "backup-mc.example.com:25565"]
+      },
+      {
+        "name": "Creative",
+        "urls": ["creative.example.com:25565"]
+      }
+    ],
+    "schedule": {
+      "timezone": "America/Los_Angeles",
+      "health_check_interval_minutes": 1,
+      "player_check_interval_seconds": 30
+    }
   }
 }

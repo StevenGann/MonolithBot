@@ -42,8 +42,8 @@ Announcement Structure:
     ```
 
 Slash Commands:
-    /announce - Manually trigger an announcement (admin only)
-    /status   - Show bot status, Jellyfin status, and schedule info
+    /jf-announce - Manually trigger an announcement (admin only)
+    /jf-status   - Show bot status, Jellyfin status, and schedule info
 
 Configuration:
     Uses these settings from bot.config:
@@ -122,8 +122,8 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
     Example:
         The cog is automatically loaded. Commands available:
 
-        >>> /status    # Check bot and server status
-        >>> /announce  # Manually trigger announcement (admin only)
+        >>> /jf-status    # Check bot and server status
+        >>> /jf-announce  # Manually trigger announcement (admin only)
     """
 
     def __init__(self, bot: "MonolithBot") -> None:
@@ -468,8 +468,8 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
     # -------------------------------------------------------------------------
 
     @app_commands.command(
-        name="announce",
-        description="Manually trigger a content announcement",
+        name="jf-announce",
+        description="Manually trigger a Jellyfin content announcement",
     )
     @app_commands.default_permissions(administrator=True)
     async def announce_command(self, interaction: discord.Interaction) -> None:
@@ -499,8 +499,8 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
             )
 
     @app_commands.command(
-        name="status",
-        description="Check bot and Jellyfin status",
+        name="jf-status",
+        description="Check Jellyfin server status",
     )
     async def status_command(self, interaction: discord.Interaction) -> None:
         """
