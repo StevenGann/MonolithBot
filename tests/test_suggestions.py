@@ -122,7 +122,9 @@ class TestCreateSuggestionEmbed:
         assert embed.title == "💿 Album Suggestion"
         assert embed.color == discord.Color.purple()
 
-    def test_long_description_truncated(self, cog: Any, movie_item: JellyfinItem) -> None:
+    def test_long_description_truncated(
+        self, cog: Any, movie_item: JellyfinItem
+    ) -> None:
         """Test that long descriptions are truncated."""
         # Create item with very long overview
         long_overview = "A" * 500
@@ -242,66 +244,51 @@ class TestPostRandomSuggestions:
 
 
 # =============================================================================
-# Suggest Command Tests
+# Add Item Fields Tests
 # =============================================================================
 
 
-class TestSuggestCommand:
-    """Tests for suggest_command slash command."""
+class TestAddItemFields:
+    """Tests for _add_item_fields method."""
 
     @pytest.fixture
     def cog(self, mock_bot) -> Any:
         """Create a test cog."""
         return create_suggestions_cog(mock_bot)
 
-    @pytest.fixture
-    def mock_interaction(self) -> MagicMock:
-        """Create a mock Discord interaction."""
-        interaction = MagicMock(spec=discord.Interaction)
-        interaction.response = MagicMock()
-        interaction.response.defer = AsyncMock()
-        interaction.followup = MagicMock()
-        interaction.followup.send = AsyncMock()
-        interaction.channel = MagicMock()
-        return interaction
+    def test_adds_artist_field_for_audio(self, cog: Any) -> None:
+        """Test that artist field is added for audio items."""
+        embed = discord.Embed()
+        audio_item = JellyfinItem(
+            id="audio123",
+            name="Song",
+            item_type="Audio",
+            artists=["Artist1", "Artist2"],
+            date_created=datetime.now(timezone.utc),
+        )
 
-    @pytest.mark.asyncio
-    async def test_command_with_no_type_posts_all(
-        self, cog: Any, mock_interaction: MagicMock
-    ) -> None:
-        """Test command with no type posts all suggestions."""
-        cog.post_random_suggestions = AsyncMock(return_value=3)
+        cog._add_item_fields(embed, audio_item)
 
-        await cog.suggest_command(mock_interaction, content_type=None)
+        artist_field = next((f for f in embed.fields if f.name == "Artist"), None)
+        assert artist_field is not None
+        assert artist_field.value == "Artist1, Artist2"
 
-        mock_interaction.response.defer.assert_called_once()
-        cog.post_random_suggestions.assert_called_once_with(mock_interaction.channel)
+    def test_adds_year_field_when_available(self, cog: Any) -> None:
+        """Test that year field is added when available."""
+        embed = discord.Embed()
+        movie_item = JellyfinItem(
+            id="movie123",
+            name="Movie",
+            item_type="Movie",
+            year=2020,
+            date_created=datetime.now(timezone.utc),
+        )
 
-    @pytest.mark.asyncio
-    async def test_command_with_type_posts_single(
-        self, cog: Any, mock_interaction: MagicMock, movie_item: JellyfinItem
-    ) -> None:
-        """Test command with type posts single suggestion."""
-        cog.bot.jellyfin_service.get_random_item = AsyncMock(return_value=movie_item)
+        cog._add_item_fields(embed, movie_item)
 
-        await cog.suggest_command(mock_interaction, content_type="movie")
-
-        mock_interaction.response.defer.assert_called_once()
-        cog.bot.jellyfin_service.get_random_item.assert_called_once_with("Movie")
-        mock_interaction.followup.send.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_command_handles_no_jellyfin_service(
-        self, cog: Any, mock_interaction: MagicMock
-    ) -> None:
-        """Test command handles missing Jellyfin service."""
-        cog.bot.jellyfin_service = None
-
-        await cog.suggest_command(mock_interaction, content_type=None)
-
-        mock_interaction.followup.send.assert_called_once()
-        call_args = mock_interaction.followup.send.call_args
-        assert "not initialized" in call_args[0][0]
+        year_field = next((f for f in embed.fields if f.name == "Year"), None)
+        assert year_field is not None
+        assert year_field.value == "2020"
 
 
 # =============================================================================
