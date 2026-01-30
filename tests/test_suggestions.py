@@ -69,13 +69,16 @@ class TestCreateSuggestionEmbed:
 
     def test_movie_embed_creation(self, cog: Any, movie_item: JellyfinItem) -> None:
         """Test embed creation for a movie suggestion."""
-        embed = cog._create_suggestion_embed(movie_item, "Movie")
+        embed = cog._create_suggestion_embed("Movie", movie_item)
 
         assert embed.title == "🎬 Movie Suggestion"
-        assert embed.description == "The Matrix (1999)"
         assert embed.color == discord.Color.blue()
         assert embed.url == "http://jellyfin/item/movie123"
         assert embed.thumbnail.url == "http://jellyfin/image/movie123"
+        # Check that title field exists
+        title_field = next((f for f in embed.fields if f.name == "Title"), None)
+        assert title_field is not None
+        assert title_field.value == "The Matrix (1999)"
 
     @pytest.fixture
     def series_item(self) -> JellyfinItem:
@@ -91,11 +94,14 @@ class TestCreateSuggestionEmbed:
 
     def test_series_embed_creation(self, cog: Any, series_item: JellyfinItem) -> None:
         """Test embed creation for a series suggestion."""
-        embed = cog._create_suggestion_embed(series_item, "Series")
+        embed = cog._create_suggestion_embed("Series", series_item)
 
         assert embed.title == "📺 TV Show Suggestion"
-        assert embed.description == "Breaking Bad (2008)"
         assert embed.color == discord.Color.green()
+        # Check that title field exists
+        title_field = next((f for f in embed.fields if f.name == "Title"), None)
+        assert title_field is not None
+        assert title_field.value == "Breaking Bad (2008)"
 
     @pytest.fixture
     def album_item(self) -> JellyfinItem:
@@ -111,7 +117,7 @@ class TestCreateSuggestionEmbed:
 
     def test_album_embed_creation(self, cog: Any, album_item: JellyfinItem) -> None:
         """Test embed creation for an album suggestion."""
-        embed = cog._create_suggestion_embed(album_item, "MusicAlbum")
+        embed = cog._create_suggestion_embed("MusicAlbum", album_item)
 
         assert embed.title == "💿 Album Suggestion"
         assert embed.color == discord.Color.purple()
@@ -122,10 +128,12 @@ class TestCreateSuggestionEmbed:
         long_overview = "A" * 500
         movie_item.overview = long_overview
 
-        embed = cog._create_suggestion_embed(movie_item, "Movie")
+        embed = cog._create_suggestion_embed("Movie", movie_item)
 
-        # Description should be truncated to MAX_DESCRIPTION_LENGTH
-        assert len(embed.fields[0].value) <= 300
+        # Overview field should be truncated to MAX_DESCRIPTION_LENGTH
+        overview_field = next((f for f in embed.fields if f.name == "Overview"), None)
+        assert overview_field is not None
+        assert len(overview_field.value) <= 303  # 300 + "..."
 
 
 # =============================================================================
@@ -187,10 +195,23 @@ class TestPostRandomSuggestions:
         self,
         cog: Any,
         mock_channel: MagicMock,
-        movie_item: JellyfinItem,
-        series_item: JellyfinItem,
     ) -> None:
         """Test returns correct count when suggestions are found."""
+        # Create test items
+        movie_item = JellyfinItem(
+            id="movie123",
+            name="The Matrix",
+            item_type="Movie",
+            year=1999,
+            date_created=datetime.now(timezone.utc),
+        )
+        series_item = JellyfinItem(
+            id="series123",
+            name="Breaking Bad",
+            item_type="Series",
+            year=2008,
+            date_created=datetime.now(timezone.utc),
+        )
         suggestions = {
             "Movie": movie_item,
             "Series": series_item,
@@ -221,12 +242,12 @@ class TestPostRandomSuggestions:
 
 
 # =============================================================================
-# Post Single Suggestion Tests
+# Suggest Command Tests
 # =============================================================================
 
 
-class TestPostSingleSuggestion:
-    """Tests for post_single_suggestion method."""
+class TestSuggestCommand:
+    """Tests for suggest_command slash command."""
 
     @pytest.fixture
     def cog(self, mock_bot) -> Any:
@@ -234,60 +255,53 @@ class TestPostSingleSuggestion:
         return create_suggestions_cog(mock_bot)
 
     @pytest.fixture
-    def mock_channel(self) -> MagicMock:
-        """Create a mock Discord channel."""
-        channel = MagicMock(spec=discord.TextChannel)
-        channel.send = AsyncMock()
-        return channel
+    def mock_interaction(self) -> MagicMock:
+        """Create a mock Discord interaction."""
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.response = MagicMock()
+        interaction.response.defer = AsyncMock()
+        interaction.followup = MagicMock()
+        interaction.followup.send = AsyncMock()
+        interaction.channel = MagicMock()
+        return interaction
 
     @pytest.mark.asyncio
-    async def test_returns_zero_when_no_channel(
-        self, cog: Any, mock_bot: MagicMock
+    async def test_command_with_no_type_posts_all(
+        self, cog: Any, mock_interaction: MagicMock
     ) -> None:
-        """Test returns 0 when channel is not found."""
-        mock_bot.get_channel.return_value = None
+        """Test command with no type posts all suggestions."""
+        cog.post_random_suggestions = AsyncMock(return_value=3)
 
-        count = await cog.post_single_suggestion("Movie")
+        await cog.suggest_command(mock_interaction, content_type=None)
 
-        assert count == 0
+        mock_interaction.response.defer.assert_called_once()
+        cog.post_random_suggestions.assert_called_once_with(mock_interaction.channel)
 
     @pytest.mark.asyncio
-    async def test_returns_zero_when_no_item(
-        self, cog: Any, mock_channel: MagicMock
+    async def test_command_with_type_posts_single(
+        self, cog: Any, mock_interaction: MagicMock, movie_item: JellyfinItem
     ) -> None:
-        """Test returns 0 when no item found."""
-        cog.bot.jellyfin_service.get_random_item = AsyncMock(return_value=None)
-
-        count = await cog.post_single_suggestion("Movie", channel=mock_channel)
-
-        assert count == 0
-        mock_channel.send.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_returns_one_when_item_found(
-        self, cog: Any, mock_channel: MagicMock, movie_item: JellyfinItem
-    ) -> None:
-        """Test returns 1 when item is found and posted."""
+        """Test command with type posts single suggestion."""
         cog.bot.jellyfin_service.get_random_item = AsyncMock(return_value=movie_item)
 
-        count = await cog.post_single_suggestion("Movie", channel=mock_channel)
+        await cog.suggest_command(mock_interaction, content_type="movie")
 
-        assert count == 1
-        mock_channel.send.assert_called_once()
+        mock_interaction.response.defer.assert_called_once()
+        cog.bot.jellyfin_service.get_random_item.assert_called_once_with("Movie")
+        mock_interaction.followup.send.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_handles_jellyfin_error(
-        self, cog: Any, mock_channel: MagicMock
+    async def test_command_handles_no_jellyfin_service(
+        self, cog: Any, mock_interaction: MagicMock
     ) -> None:
-        """Test handles Jellyfin errors gracefully."""
-        cog.bot.jellyfin_service.get_random_item = AsyncMock(
-            side_effect=JellyfinError("Connection failed")
-        )
+        """Test command handles missing Jellyfin service."""
+        cog.bot.jellyfin_service = None
 
-        count = await cog.post_single_suggestion("Movie", channel=mock_channel)
+        await cog.suggest_command(mock_interaction, content_type=None)
 
-        assert count == 0
-        mock_channel.send.assert_not_called()
+        mock_interaction.followup.send.assert_called_once()
+        call_args = mock_interaction.followup.send.call_args
+        assert "not initialized" in call_args[0][0]
 
 
 # =============================================================================

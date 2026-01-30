@@ -10,9 +10,7 @@ Tests cover:
 import argparse
 import logging
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from bot.main import TestModes, build_test_modes, parse_args, setup_logging
 
@@ -210,13 +208,19 @@ class TestSetupLogging:
 
     def test_info_level_by_default(self) -> None:
         """Test that logging defaults to INFO level."""
+        # Reset logging to ensure clean state
+        logging.root.setLevel(logging.WARNING)
         setup_logging(verbose=False)
-        assert logging.getLogger("monolithbot").level == logging.INFO
+        # basicConfig sets the root logger level
+        assert logging.root.level == logging.INFO
 
     def test_debug_level_when_verbose(self) -> None:
         """Test that logging uses DEBUG level when verbose."""
+        # Reset logging to ensure clean state
+        logging.root.setLevel(logging.WARNING)
         setup_logging(verbose=True)
-        assert logging.getLogger("monolithbot").level == logging.DEBUG
+        # basicConfig sets the root logger level
+        assert logging.root.level == logging.DEBUG
 
     def test_third_party_loggers_reduced(self) -> None:
         """Test that third-party loggers have reduced verbosity."""
