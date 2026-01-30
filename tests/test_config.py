@@ -911,7 +911,10 @@ class TestBuildMinecraftConfig:
                 "servers": [
                     {"name": "Survival", "urls": ["mc1.example.com:25565"]},
                     {"name": "Creative", "urls": ["mc2.example.com:25565"]},
-                    {"name": "Minigames", "urls": ["mc3.example.com:25565", "backup:25565"]},
+                    {
+                        "name": "Minigames",
+                        "urls": ["mc3.example.com:25565", "backup:25565"],
+                    },
                 ],
             }
         }

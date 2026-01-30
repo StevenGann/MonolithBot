@@ -317,9 +317,7 @@ class TestTestModeDateDisplay:
         # Should use Discord timestamp format
         assert f"<t:{int(dt.timestamp())}:F>" in date_field.value
 
-    def test_no_date_field_in_test_mode_without_date(
-        self, mock_bot: MagicMock
-    ) -> None:
+    def test_no_date_field_in_test_mode_without_date(self, mock_bot: MagicMock) -> None:
         """Test date field is not added in test mode when date is missing."""
         mock_bot.test_mode = True
         cog = create_announcements_cog(mock_bot)

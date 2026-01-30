@@ -234,7 +234,9 @@ class TestJellyfinClientUrls:
             image_type="Backdrop",
             max_width=800,
         )
-        assert url == "http://localhost:8096/Items/item-123/Images/Backdrop?maxWidth=800"
+        assert (
+            url == "http://localhost:8096/Items/item-123/Images/Backdrop?maxWidth=800"
+        )
 
     def test_get_item_url(self, client: JellyfinClient) -> None:
         """Test building item web UI URL."""
@@ -442,7 +444,9 @@ class TestJellyfinClientHttp:
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_get_recent_items_filters_old_items(self, client: JellyfinClient) -> None:
+    async def test_get_recent_items_filters_old_items(
+        self, client: JellyfinClient
+    ) -> None:
         """Test that old items are filtered out client-side."""
         with aioresponses() as mocked:
             mocked.get(
@@ -1345,7 +1349,9 @@ class TestJellyfinServiceDelegatedMethods:
         result = await service.get_random_items_by_type(["Movie", "Series"])
 
         assert result == {}
-        mock_client.get_random_items_by_type.assert_called_once_with(["Movie", "Series"])
+        mock_client.get_random_items_by_type.assert_called_once_with(
+            ["Movie", "Series"]
+        )
 
 
 class TestJellyfinServiceLifecycle:

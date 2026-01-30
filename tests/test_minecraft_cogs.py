@@ -282,9 +282,7 @@ class TestMinecraftPlayersCogNotifications:
             return cog
 
     @pytest.mark.asyncio
-    async def test_send_single_player_join(
-        self, cog, mock_channel, sample_status
-    ):
+    async def test_send_single_player_join(self, cog, mock_channel, sample_status):
         """Test announcement for single player join."""
         new_players = {"Steve"}
         await cog._send_join_announcement("Survival", new_players, sample_status)
@@ -297,9 +295,7 @@ class TestMinecraftPlayersCogNotifications:
         assert "Survival" in embed.title
 
     @pytest.mark.asyncio
-    async def test_send_multiple_player_join(
-        self, cog, mock_channel, sample_status
-    ):
+    async def test_send_multiple_player_join(self, cog, mock_channel, sample_status):
         """Test announcement for multiple players joining."""
         new_players = {"Steve", "Alex"}
         await cog._send_join_announcement("Survival", new_players, sample_status)
@@ -324,9 +320,7 @@ class TestMinecraftPlayersCogNotifications:
         assert "Online Now" in field_names
 
     @pytest.mark.asyncio
-    async def test_send_announcement_no_channel(
-        self, cog, mock_bot, sample_status
-    ):
+    async def test_send_announcement_no_channel(self, cog, mock_bot, sample_status):
         """Test announcement gracefully handles missing channel."""
         mock_bot.get_channel.return_value = None
         await cog._send_join_announcement("Survival", {"Steve"}, sample_status)

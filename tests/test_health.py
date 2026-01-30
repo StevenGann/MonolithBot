@@ -179,9 +179,7 @@ class TestHandleServerOnline:
         cog._server_online = False
         cog._went_offline = datetime.now(timezone.utc)
 
-        with patch.object(
-            cog, "_send_online_notification", new_callable=AsyncMock
-        ):
+        with patch.object(cog, "_send_online_notification", new_callable=AsyncMock):
             await cog._handle_server_online(server_info)
 
         assert cog._went_offline is None
@@ -205,9 +203,7 @@ class TestHandleServerOffline:
         """Test that server state is updated to offline."""
         cog._server_online = True
 
-        with patch.object(
-            cog, "_send_offline_notification", new_callable=AsyncMock
-        ):
+        with patch.object(cog, "_send_offline_notification", new_callable=AsyncMock):
             await cog._handle_server_offline("Connection refused")
 
         assert cog._server_online is False
@@ -218,9 +214,7 @@ class TestHandleServerOffline:
         cog._server_online = True
         cog._went_offline = None
 
-        with patch.object(
-            cog, "_send_offline_notification", new_callable=AsyncMock
-        ):
+        with patch.object(cog, "_send_offline_notification", new_callable=AsyncMock):
             await cog._handle_server_offline("Connection refused")
 
         assert cog._went_offline is not None
@@ -318,9 +312,7 @@ class TestRunHealthCheck:
         cog.bot.jellyfin_service.check_health = AsyncMock(return_value=server_info)
         cog._last_server_info = None
 
-        with patch.object(
-            cog, "_handle_server_online", new_callable=AsyncMock
-        ):
+        with patch.object(cog, "_handle_server_online", new_callable=AsyncMock):
             await cog._run_health_check()
 
         assert cog._last_server_info == server_info
@@ -382,9 +374,7 @@ class TestSendOnlineNotification:
         await cog._send_online_notification(server_info, downtime)
 
         embed = mock_discord_channel.send.call_args.kwargs["embed"]
-        downtime_field = next(
-            (f for f in embed.fields if f.name == "Downtime"), None
-        )
+        downtime_field = next((f for f in embed.fields if f.name == "Downtime"), None)
         assert downtime_field is not None
 
 

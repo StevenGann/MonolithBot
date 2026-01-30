@@ -375,7 +375,9 @@ class MinecraftPlayersCog(commands.Cog, name="MinecraftPlayers"):
                     player_list = ", ".join(sorted(status.player_names))
                     if len(player_list) > 200:
                         player_list = player_list[:200] + "..."
-                    player_text = f"**{status.player_count}** player(s) online\n{player_list}"
+                    player_text = (
+                        f"**{status.player_count}** player(s) online\n{player_list}"
+                    )
                 else:
                     player_text = f"**{status.player_count}** player(s) online"
 

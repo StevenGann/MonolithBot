@@ -136,7 +136,9 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
         await self._initial_health_check()
 
         # Schedule periodic health checks
-        interval_minutes = self.bot.config.jellyfin.schedule.health_check_interval_minutes
+        interval_minutes = (
+            self.bot.config.jellyfin.schedule.health_check_interval_minutes
+        )
         self.scheduler.add_job(
             self._run_health_check,
             trigger=IntervalTrigger(minutes=interval_minutes),

@@ -84,7 +84,13 @@ class TestModes:
     @classmethod
     def all_enabled(cls) -> "TestModes":
         """Create a TestModes instance with all modes enabled."""
-        return cls(jf_health=True, jf_announcement=True, jf_suggestion=True, mc_health=True, mc_announce=True)
+        return cls(
+            jf_health=True,
+            jf_announcement=True,
+            jf_suggestion=True,
+            mc_health=True,
+            mc_announce=True,
+        )
 
 
 class MonolithBot(commands.Bot):
@@ -111,9 +117,7 @@ class MonolithBot(commands.Bot):
         >>> await bot.start(config.discord.token)
     """
 
-    def __init__(
-        self, config: Config, test_modes: TestModes | None = None
-    ) -> None:
+    def __init__(self, config: Config, test_modes: TestModes | None = None) -> None:
         """
         Initialize the MonolithBot instance.
 
@@ -192,20 +196,24 @@ class MonolithBot(commands.Bot):
         cogs_to_load = []
 
         if self.config.jellyfin.enabled:
-            cogs_to_load.extend([
-                "bot.cogs.jellyfin.announcements",
-                "bot.cogs.jellyfin.health",
-                "bot.cogs.jellyfin.suggestions",
-            ])
+            cogs_to_load.extend(
+                [
+                    "bot.cogs.jellyfin.announcements",
+                    "bot.cogs.jellyfin.health",
+                    "bot.cogs.jellyfin.suggestions",
+                ]
+            )
             logger.info("Jellyfin integration enabled - loading Jellyfin cogs")
         else:
             logger.info("Jellyfin integration disabled - skipping Jellyfin cogs")
 
         if self.config.minecraft.enabled:
-            cogs_to_load.extend([
-                "bot.cogs.minecraft.health",
-                "bot.cogs.minecraft.players",
-            ])
+            cogs_to_load.extend(
+                [
+                    "bot.cogs.minecraft.health",
+                    "bot.cogs.minecraft.players",
+                ]
+            )
             logger.info("Minecraft integration enabled - loading Minecraft cogs")
         else:
             logger.info("Minecraft integration disabled - skipping Minecraft cogs")
@@ -307,7 +315,11 @@ class MonolithBot(commands.Bot):
             if self._test_modes.jf_suggestion:
                 await self._run_jf_suggestion_test()
         else:
-            if self._test_modes.jf_health or self._test_modes.jf_announcement or self._test_modes.jf_suggestion:
+            if (
+                self._test_modes.jf_health
+                or self._test_modes.jf_announcement
+                or self._test_modes.jf_suggestion
+            ):
                 logger.warning("Jellyfin is disabled - skipping Jellyfin test modes")
 
         # Run Minecraft tests if enabled
@@ -384,12 +396,16 @@ class MonolithBot(commands.Bot):
                         f"TEST: {server_name}: {status.player_count}/{status.max_players} players, "
                         f"v{status.version} (via {active_url})"
                     )
-                    await health_cog._send_online_notification(server_name, status, None)
+                    await health_cog._send_online_notification(
+                        server_name, status, None
+                    )
                 logger.info("TEST: Minecraft health checks complete!")
             except Exception as e:
                 logger.error(f"TEST: Minecraft health check failed: {e}")
         else:
-            logger.warning("TEST: MinecraftHealth cog not loaded or service unavailable")
+            logger.warning(
+                "TEST: MinecraftHealth cog not loaded or service unavailable"
+            )
 
     async def _run_mc_announce_test(self) -> None:
         """Run Minecraft player announcement test."""
@@ -411,7 +427,9 @@ class MonolithBot(commands.Bot):
             except Exception as e:
                 logger.error(f"TEST: Minecraft player announcement failed: {e}")
         else:
-            logger.warning("TEST: MinecraftPlayers cog not loaded or service unavailable")
+            logger.warning(
+                "TEST: MinecraftPlayers cog not loaded or service unavailable"
+            )
 
     async def shutdown(self) -> None:
         """
@@ -480,7 +498,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="MonolithBot - Discord bot for Jellyfin monitoring",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-epilog="""
+        epilog="""
 Examples:
   python -m bot.main                         Run with default config.json
   python -m bot.main --config my.json        Run with custom config file
@@ -677,13 +695,19 @@ def main() -> NoReturn | None:
     logger.info(f"Jellyfin enabled: {config.jellyfin.enabled}")
     if config.jellyfin.enabled:
         if len(config.jellyfin.urls) > 1:
-            logger.info(f"Jellyfin URLs ({len(config.jellyfin.urls)} configured for failover):")
+            logger.info(
+                f"Jellyfin URLs ({len(config.jellyfin.urls)} configured for failover):"
+            )
             for i, url in enumerate(config.jellyfin.urls):
                 logger.info(f"  [{i + 1}] {url}")
         else:
             logger.info(f"Jellyfin URL: {config.jellyfin.url}")
-        logger.info(f"Announcement times: {', '.join(config.jellyfin.schedule.announcement_times)}")
-        logger.info(f"Suggestion times: {', '.join(config.jellyfin.schedule.suggestion_times)}")
+        logger.info(
+            f"Announcement times: {', '.join(config.jellyfin.schedule.announcement_times)}"
+        )
+        logger.info(
+            f"Suggestion times: {', '.join(config.jellyfin.schedule.suggestion_times)}"
+        )
         logger.info(f"Timezone: {config.jellyfin.schedule.timezone}")
         logger.info(f"Content types: {', '.join(config.jellyfin.content_types)}")
 

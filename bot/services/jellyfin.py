@@ -637,8 +637,7 @@ class JellyfinClient:
             >>> embed.set_thumbnail(url=url)
         """
         return (
-            f"{self.base_url}/Items/{item_id}/Images/{image_type}"
-            f"?maxWidth={max_width}"
+            f"{self.base_url}/Items/{item_id}/Images/{image_type}?maxWidth={max_width}"
         )
 
     def get_item_url(self, item_id: str) -> str:
@@ -915,9 +914,7 @@ class JellyfinService:
 
         # All URLs failed
         error_summary = "; ".join(errors)
-        raise JellyfinConnectionError(
-            f"All Jellyfin URLs failed: {error_summary}"
-        )
+        raise JellyfinConnectionError(f"All Jellyfin URLs failed: {error_summary}")
 
     async def check_health(self) -> ServerInfo:
         """
@@ -1032,10 +1029,7 @@ class JellyfinService:
         See JellyfinClient.get_item_image_url for full documentation.
         """
         base_url = self._active_url or self.urls[0]
-        return (
-            f"{base_url}/Items/{item_id}/Images/{image_type}"
-            f"?maxWidth={max_width}"
-        )
+        return f"{base_url}/Items/{item_id}/Images/{image_type}?maxWidth={max_width}"
 
     def get_item_url(self, item_id: str) -> str:
         """

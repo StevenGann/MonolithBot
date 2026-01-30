@@ -285,7 +285,9 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
 
         # Fetch random items from Jellyfin
         try:
-            suggestions = await self.bot.jellyfin_service.get_random_items_by_type(SUGGESTION_TYPES)
+            suggestions = await self.bot.jellyfin_service.get_random_items_by_type(
+                SUGGESTION_TYPES
+            )
         except JellyfinError as e:
             logger.error(f"Failed to fetch suggestions from Jellyfin: {e}")
             return 0

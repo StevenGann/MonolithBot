@@ -329,7 +329,9 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
         max_items = self.bot.config.jellyfin.schedule.max_items_per_type
 
         # Send section header with link to Recently Added page
-        recently_added_url = self.bot.jellyfin_service.get_recently_added_url(content_type)
+        recently_added_url = self.bot.jellyfin_service.get_recently_added_url(
+            content_type
+        )
         section_embed = discord.Embed(
             title=f"{emoji} New {type_name}",
             url=recently_added_url,

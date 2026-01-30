@@ -465,9 +465,7 @@ class TestMinecraftServicePlayerTracking:
         ]
         return MinecraftService(configs)
 
-    def test_detect_player_joins_first_check(
-        self, service: MinecraftService
-    ) -> None:
+    def test_detect_player_joins_first_check(self, service: MinecraftService) -> None:
         """Test join detection on first check returns all players."""
         current = {"Steve", "Alex"}
         new_players = service.detect_player_joins("Survival", current)

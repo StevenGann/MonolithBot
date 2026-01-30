@@ -524,7 +524,9 @@ class MinecraftHealthCog(commands.Cog, name="MinecraftHealth"):
 
                 status_text = f"❌ **Offline**\n{error_msg}"
                 if state.last_online:
-                    status_text += f"\n\nLast online: <t:{int(state.last_online.timestamp())}:R>"
+                    status_text += (
+                        f"\n\nLast online: <t:{int(state.last_online.timestamp())}:R>"
+                    )
 
                 embed.add_field(
                     name=f"🔴 {state.name}",

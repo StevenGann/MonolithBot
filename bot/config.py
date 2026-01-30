@@ -202,7 +202,9 @@ class MinecraftServerConfig:
         if not self.name:
             raise ValueError("Minecraft server name cannot be empty")
         if not self.urls:
-            raise ValueError(f"Minecraft server '{self.name}' must have at least one URL")
+            raise ValueError(
+                f"Minecraft server '{self.name}' must have at least one URL"
+            )
 
 
 @dataclass
@@ -565,7 +567,9 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
             # Fall back to legacy "url" string
             url_from_json = jellyfin_json.get("url")
             if url_from_json:
-                urls = [url_from_json] if isinstance(url_from_json, str) else url_from_json
+                urls = (
+                    [url_from_json] if isinstance(url_from_json, str) else url_from_json
+                )
             else:
                 urls = []
 
@@ -640,7 +644,9 @@ def _build_minecraft_schedule_config(
     )
 
 
-def _build_minecraft_server_config(server_json: dict[str, Any]) -> MinecraftServerConfig:
+def _build_minecraft_server_config(
+    server_json: dict[str, Any],
+) -> MinecraftServerConfig:
     """
     Build a single Minecraft server configuration from JSON.
 
@@ -655,9 +661,7 @@ def _build_minecraft_server_config(server_json: dict[str, Any]) -> MinecraftServ
     """
     name = server_json.get("name")
     if not name:
-        raise ConfigurationError(
-            "Each Minecraft server must have a 'name' field"
-        )
+        raise ConfigurationError("Each Minecraft server must have a 'name' field")
 
     urls = server_json.get("urls", [])
     if not urls:
@@ -711,9 +715,9 @@ def _build_minecraft_config(json_config: dict[str, Any]) -> MinecraftConfig:
         "MINECRAFT_ANNOUNCEMENT_CHANNEL_ID"
     ) or minecraft_json.get("announcement_channel_id")
 
-    alert_channel_id = _get_env_int(
-        "MINECRAFT_ALERT_CHANNEL_ID"
-    ) or minecraft_json.get("alert_channel_id")
+    alert_channel_id = _get_env_int("MINECRAFT_ALERT_CHANNEL_ID") or minecraft_json.get(
+        "alert_channel_id"
+    )
 
     # Validate channels if enabled
     if enabled and not announcement_channel_id:
