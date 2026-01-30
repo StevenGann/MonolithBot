@@ -28,6 +28,7 @@ See Also:
 import argparse
 import asyncio
 import logging
+import signal
 import sys
 from dataclasses import dataclass
 from pathlib import Path

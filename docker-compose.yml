@@ -3,13 +3,11 @@ services:
     image: ghcr.io/stevengann/monolithbot:latest
     container_name: monolithbot
     restart: unless-stopped
-    
     # Mount config.json from host directory
     # All configuration is read from config.json
     # Environment variables can optionally override JSON values if needed
     volumes:
       - /mnt/App-Storage/Container-Data/monolithbot/config/config.json:/app/config.json:ro
-
     # Optional: Override specific settings via environment variables
     # (Environment variables take precedence over config.json)
     # Uncomment and set these if you want to override config.json values:
@@ -22,7 +20,8 @@ services:
     # networks:
     #   - jellyfin_network
 
-# Optional: If Jellyfin is on a custom network
-# networks:
-#   jellyfin_network:
-#     external: true
+    # Optional: If Jellyfin is on a custom network
+    # networks:
+    #   jellyfin_network:
+    #     external: true
+networks: {}

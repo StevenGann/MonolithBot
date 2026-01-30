@@ -402,18 +402,6 @@ Tests run automatically on every push and pull request via GitHub Actions. The C
 - Verify the polling interval isn't too long (default: 30 seconds)
 - Check that `announcement_channel_id` is configured for Minecraft
 
-## GitHub Container Registry Setup (Maintainer)
-
-After the first push to `main`/`master`, the GitHub Actions workflow will build and publish the Docker image. However, GitHub packages are private by default. To make the image publicly pullable:
-
-1. Go to https://github.com/StevenGann/MonolithBot/packages
-2. Click on the `monolithbot` package
-3. Click **Package settings** (right sidebar)
-4. Scroll to **Danger Zone** → **Change package visibility**
-5. Select **Public** and confirm
-
-This only needs to be done once. After that, anyone can pull the image without authentication.
-
 ### Updating the Bot
 
 To update to the latest version on your server:
