@@ -602,6 +602,89 @@ class JellyfinClient:
 
         return results
 
+    async def search_items(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[JellyfinItem]:
+        """
+        Search for items in the Jellyfin library.
+
+        Performs a text search across Movies and Series in the library,
+        returning the best matches for the query.
+
+        Args:
+            query: Search query string (title, partial title, etc.).
+            limit: Maximum number of results to return. Default is 10.
+
+        Returns:
+            List of JellyfinItem objects matching the search, sorted by
+            relevance. Empty list if no matches found.
+
+        Example:
+            >>> results = await client.search_items("matrix")
+            >>> for item in results:
+            ...     print(f"{item.display_title}")
+        """
+        params = {
+            "searchTerm": query,
+            "IncludeItemTypes": "Movie,Series",
+            "Recursive": "true",
+            "Limit": str(limit),
+            "Fields": "Overview,DateCreated,ProductionYear,Artists,Album,SeriesName",
+        }
+
+        logger.debug(f"Searching Jellyfin for: {query}")
+
+        data = await self._request("GET", "/Items", params=params)
+        items = data.get("Items", [])
+
+        logger.debug(f"Search returned {len(items)} results")
+
+        return [self._parse_item(item) for item in items]
+
+    async def search_by_imdb_id(
+        self,
+        imdb_id: str,
+    ) -> Optional[JellyfinItem]:
+        """
+        Search for an item by its IMDB ID.
+
+        Performs an exact lookup for a Movie or Series with the specified
+        IMDB ID in its provider IDs.
+
+        Args:
+            imdb_id: IMDB ID (e.g., "tt0133093" for The Matrix).
+
+        Returns:
+            JellyfinItem if found, None otherwise.
+
+        Example:
+            >>> item = await client.search_by_imdb_id("tt0133093")
+            >>> if item:
+            ...     print(f"Found: {item.display_title}")
+        """
+        # Jellyfin uses AnyProviderIdEquals to search by external IDs
+        params = {
+            "AnyProviderIdEquals": f"imdb.{imdb_id}",
+            "IncludeItemTypes": "Movie,Series",
+            "Recursive": "true",
+            "Limit": "1",
+            "Fields": "Overview,DateCreated,ProductionYear,Artists,Album,SeriesName",
+        }
+
+        logger.debug(f"Searching Jellyfin for IMDB ID: {imdb_id}")
+
+        data = await self._request("GET", "/Items", params=params)
+        items = data.get("Items", [])
+
+        if items:
+            logger.debug(f"Found item for IMDB ID {imdb_id}: {items[0].get('Name')}")
+            return self._parse_item(items[0])
+
+        logger.debug(f"No item found for IMDB ID {imdb_id}")
+        return None
+
     # -------------------------------------------------------------------------
     # URL Builders
     # -------------------------------------------------------------------------
@@ -1009,6 +1092,37 @@ class JellyfinService:
         """
         client = await self._ensure_client()
         return await client.get_random_items_by_type(content_types)
+
+    async def search_items(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[JellyfinItem]:
+        """
+        Search for items in the Jellyfin library.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.search_items for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.search_items(query, limit=limit)
+
+    async def search_by_imdb_id(
+        self,
+        imdb_id: str,
+    ) -> Optional[JellyfinItem]:
+        """
+        Search for an item by its IMDB ID.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.search_by_imdb_id for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.search_by_imdb_id(imdb_id)
 
     # -------------------------------------------------------------------------
     # URL Builders (use active URL)

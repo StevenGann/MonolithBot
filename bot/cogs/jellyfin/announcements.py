@@ -12,6 +12,7 @@ Key Features:
     - Content grouped by type (Movies, TV Shows, Music)
     - Manual announcement trigger for administrators
     - Status command showing bot health and next announcement
+    - Search command to find content on Jellyfin
 
 Announcement Structure:
     When triggered, announcements are formatted as:
@@ -44,6 +45,7 @@ Announcement Structure:
 Slash Commands:
     /jf-announce - Manually trigger an announcement (admin only)
     /jf-status   - Show bot status, Jellyfin status, and schedule info
+    /jf-search   - Search for content on Jellyfin
 
 Configuration:
     Uses these settings from bot.config:
@@ -60,6 +62,7 @@ See Also:
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
@@ -103,6 +106,10 @@ CONTENT_TYPE_EMOJI: dict[str, str] = {
 # Maximum length for item descriptions (overview/plot)
 MAX_DESCRIPTION_LENGTH = 300
 
+# Regex pattern to extract IMDB ID from IMDB URLs
+# Matches: https://www.imdb.com/title/tt0133093/ or imdb.com/title/tt0133093
+IMDB_URL_PATTERN = re.compile(r"imdb\.com/title/(tt\d+)", re.IGNORECASE)
+
 
 class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
     """
@@ -124,6 +131,7 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
 
         >>> /jf-status    # Check bot and server status
         >>> /jf-announce  # Manually trigger announcement (admin only)
+        >>> /jf-search    # Search for content on Jellyfin
     """
 
     def __init__(self, bot: "MonolithBot") -> None:
@@ -571,6 +579,87 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
             )
 
         await interaction.followup.send(embed=embed)
+
+    @app_commands.command(
+        name="jf-search",
+        description="Search for content on Jellyfin",
+    )
+    @app_commands.describe(query="Search query or IMDB URL")
+    async def search_command(
+        self, interaction: discord.Interaction, query: str
+    ) -> None:
+        """
+        Search for content on Jellyfin.
+
+        Allows users to search for movies or TV shows on the Jellyfin server.
+        If an IMDB URL is provided, performs an exact lookup for that title.
+        Otherwise, performs a text search and returns the best match.
+
+        Args:
+            query: Search query (title) or IMDB URL.
+
+        Results include:
+            - Title with link to Jellyfin
+            - Cover art thumbnail
+            - Description/overview
+            - Year and content type
+        """
+        await interaction.response.defer()
+
+        if self.bot.jellyfin_service is None:
+            await interaction.followup.send(
+                "❌ Jellyfin service not initialized.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            item: Optional[JellyfinItem] = None
+            is_imdb_search = False
+
+            # Check if the query is an IMDB URL
+            imdb_match = IMDB_URL_PATTERN.search(query)
+            if imdb_match:
+                imdb_id = imdb_match.group(1)
+                is_imdb_search = True
+                logger.info(f"Searching for IMDB ID: {imdb_id}")
+                item = await self.bot.jellyfin_service.search_by_imdb_id(imdb_id)
+            else:
+                # Perform a text search and get the best match
+                logger.info(f"Searching for: {query}")
+                results = await self.bot.jellyfin_service.search_items(query, limit=1)
+                if results:
+                    item = results[0]
+
+            # Handle no results
+            if item is None:
+                if is_imdb_search:
+                    await interaction.followup.send(
+                        "❌ This title is **not available** on Jellyfin.",
+                        ephemeral=False,
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"❌ No results found for **{query}**.",
+                        ephemeral=False,
+                    )
+                return
+
+            # Build and send the result embed
+            embed = self._create_item_embed(item)
+
+            # Add a note for IMDB searches confirming availability
+            if is_imdb_search:
+                embed.set_footer(text="✅ Available on Jellyfin")
+
+            await interaction.followup.send(embed=embed)
+
+        except JellyfinError as e:
+            logger.error(f"Search failed: {e}")
+            await interaction.followup.send(
+                f"❌ Failed to search Jellyfin: {e}",
+                ephemeral=True,
+            )
 
 
 # =============================================================================
