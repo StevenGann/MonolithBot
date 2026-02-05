@@ -44,6 +44,7 @@ See Also:
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Optional
 
@@ -343,10 +344,11 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
             timestamp=datetime.now(timezone.utc),
         )
 
-        # Show error in a code block (truncate if too long)
+        # Show error in a code block (with IP addresses censored)
+        censored_error = self._censor_ip_addresses(error_message)
         embed.add_field(
             name="Error",
-            value=f"```{error_message[:500]}```",
+            value=f"```{censored_error[:500]}```",
             inline=False,
         )
 
@@ -382,6 +384,31 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
     # -------------------------------------------------------------------------
     # Utility Methods
     # -------------------------------------------------------------------------
+
+    def _censor_ip_addresses(self, text: str) -> str:
+        """
+        Censor IP addresses in text, showing only the first byte.
+
+        Replaces full IP addresses (e.g., 192.168.1.100) with censored
+        versions (e.g., 192.xxx.xxx.xxx) for privacy. Domain names are
+        not affected.
+
+        Args:
+            text: The text that may contain IP addresses.
+
+        Returns:
+            Text with IP addresses censored.
+
+        Examples:
+            >>> self._censor_ip_addresses("Connection to 192.168.1.100 failed")
+            'Connection to 192.xxx.xxx.xxx failed'
+            >>> self._censor_ip_addresses("Server at 10.0.0.1:8096 is down")
+            'Server at 10.xxx.xxx.xxx:8096 is down'
+        """
+        # Pattern matches IPv4 addresses (four octets separated by dots)
+        # Captures the first octet to preserve it
+        ip_pattern = r"\b(\d{1,3})\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"
+        return re.sub(ip_pattern, r"\1.xxx.xxx.xxx", text)
 
     def _format_duration(self, seconds: float) -> str:
         """
