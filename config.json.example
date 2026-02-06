@@ -37,5 +37,26 @@
       "health_check_interval_minutes": 1,
       "player_check_interval_seconds": 30
     }
+  },
+  "nextcloud": {
+    "enabled": false,
+    "urls": ["https://nextcloud.example.com"],
+    "admin_user": "YOUR_NEXTCLOUD_ADMIN_USER",
+    "admin_password": "YOUR_NEXTCLOUD_ADMIN_PASSWORD"
+  },
+  "navidrome": {
+    "enabled": false,
+    "urls": ["https://navidrome.example.com"],
+    "admin_user": "YOUR_NAVIDROME_ADMIN_USER",
+    "admin_password": "YOUR_NAVIDROME_ADMIN_PASSWORD"
+  },
+  "romm": {
+    "enabled": false,
+    "urls": ["https://romm.example.com"],
+    "admin_user": "YOUR_ROMM_ADMIN_USER",
+    "admin_password": "YOUR_ROMM_ADMIN_PASSWORD"
+  },
+  "registration": {
+    "enabled": false
   }
 }

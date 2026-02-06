@@ -1,6 +1,6 @@
 # MonolithBot
 
-A Discord bot for monitoring your Jellyfin media server and Minecraft game servers. MonolithBot keeps your Discord community updated on new media content, server status, and player activity.
+A Discord bot for monitoring your Jellyfin media server and Minecraft game servers, with multi-service user registration. MonolithBot keeps your Discord community updated on new media content, server status, and player activity.
 
 ## Features
 
@@ -18,9 +18,16 @@ A Discord bot for monitoring your Jellyfin media server and Minecraft game serve
 - **🔄 Multi-URL Failover**: Configure backup addresses per server for automatic failover
 - **📊 Status Details**: Version, player count, MOTD, and latency tracking
 
+### Multi-Service User Registration
+- **🔐 One-Click Registration**: New users can DM the bot to register on all your services at once
+- **🌐 Supported Services**: Jellyfin, NextCloud, Navidrome, and Romm
+- **🔑 Secure Password Generation**: Cryptographically secure passwords generated and delivered via DM
+- **📋 Per-Service Status**: See exactly which services were registered, skipped, or failed
+- **🎯 Smart Handling**: Gracefully handles users who already exist on some services
+
 ### General
 - **⚙️ Flexible Configuration**: Configure via JSON file (local) or environment variables (Docker)
-- **✅ Well Tested**: Comprehensive test suite with 300+ tests and CI/CD integration
+- **✅ Well Tested**: Comprehensive test suite with 330+ tests and CI/CD integration
 
 ## Quick Start
 
@@ -178,6 +185,44 @@ Each server in the `servers` list has:
 | `health_check_interval_minutes` | `1` | How often to check server health |
 | `player_check_interval_seconds` | `30` | How often to poll for player joins |
 
+### Registration Settings
+
+The registration feature allows new users to create accounts on multiple services by DMing the bot.
+
+| Setting | Description | Required |
+|---------|-------------|----------|
+| `registration.enabled` | Enable/disable registration feature (default: false) | ❌ |
+
+#### Service Configuration for Registration
+
+Each service that users can register on has its own configuration:
+
+**NextCloud:**
+| Setting | Description | Required |
+|---------|-------------|----------|
+| `nextcloud.enabled` | Enable/disable NextCloud registration | ❌ |
+| `nextcloud.urls` | List of NextCloud server URLs | ✅ if enabled |
+| `nextcloud.admin_user` | Admin username for user creation | ✅ if enabled |
+| `nextcloud.admin_password` | Admin password | ✅ if enabled |
+
+**Navidrome:**
+| Setting | Description | Required |
+|---------|-------------|----------|
+| `navidrome.enabled` | Enable/disable Navidrome registration | ❌ |
+| `navidrome.urls` | List of Navidrome server URLs | ✅ if enabled |
+| `navidrome.admin_user` | Admin username for user creation | ✅ if enabled |
+| `navidrome.admin_password` | Admin password | ✅ if enabled |
+
+**Romm:**
+| Setting | Description | Required |
+|---------|-------------|----------|
+| `romm.enabled` | Enable/disable Romm registration | ❌ |
+| `romm.urls` | List of Romm server URLs | ✅ if enabled |
+| `romm.admin_user` | Admin username for user creation | ✅ if enabled |
+| `romm.admin_password` | Admin password | ✅ if enabled |
+
+**Note:** Jellyfin uses the existing `jellyfin` configuration for registration.
+
 ### Example Configuration
 
 ```json
@@ -218,6 +263,27 @@ Each server in the `servers` list has:
       "health_check_interval_minutes": 1,
       "player_check_interval_seconds": 30
     }
+  },
+  "nextcloud": {
+    "enabled": true,
+    "urls": ["https://nextcloud.example.com"],
+    "admin_user": "admin",
+    "admin_password": "YOUR_ADMIN_PASSWORD"
+  },
+  "navidrome": {
+    "enabled": true,
+    "urls": ["https://navidrome.example.com"],
+    "admin_user": "admin",
+    "admin_password": "YOUR_ADMIN_PASSWORD"
+  },
+  "romm": {
+    "enabled": true,
+    "urls": ["https://romm.example.com"],
+    "admin_user": "admin",
+    "admin_password": "YOUR_ADMIN_PASSWORD"
+  },
+  "registration": {
+    "enabled": true
   }
 }
 ```
@@ -299,6 +365,23 @@ For Docker deployment, use these environment variables:
 
 **Note**: Minecraft server definitions (name, URLs) must be configured in `config.json` and cannot be set via environment variables.
 
+### Registration Services
+| Variable | JSON Equivalent |
+|----------|-----------------|
+| `REGISTRATION_ENABLED` | `registration.enabled` |
+| `NEXTCLOUD_ENABLED` | `nextcloud.enabled` |
+| `NEXTCLOUD_URL` | `nextcloud.urls` (single or comma-separated) |
+| `NEXTCLOUD_ADMIN_USER` | `nextcloud.admin_user` |
+| `NEXTCLOUD_ADMIN_PASSWORD` | `nextcloud.admin_password` |
+| `NAVIDROME_ENABLED` | `navidrome.enabled` |
+| `NAVIDROME_URL` | `navidrome.urls` (single or comma-separated) |
+| `NAVIDROME_ADMIN_USER` | `navidrome.admin_user` |
+| `NAVIDROME_ADMIN_PASSWORD` | `navidrome.admin_password` |
+| `ROMM_ENABLED` | `romm.enabled` |
+| `ROMM_URL` | `romm.urls` (single or comma-separated) |
+| `ROMM_ADMIN_USER` | `romm.admin_user` |
+| `ROMM_ADMIN_PASSWORD` | `romm.admin_password` |
+
 ## Bot Commands
 
 ### Jellyfin Commands
@@ -316,7 +399,55 @@ For Docker deployment, use these environment variables:
 | `/mc-status` | Check all Minecraft server status | Everyone |
 | `/mc-players` | Show who's playing on each server | Everyone |
 
+### Registration Commands
+
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/register` | Register on all enabled services (DM only) | Everyone |
+| DM: `register <username> <email>` | Alternative text-based registration | Everyone |
+
+**Registration Usage:**
+
+1. **Via Slash Command** (recommended):
+   - DM the bot and use `/register`
+   - Enter your desired username and email address
+   - The bot will register you on all enabled services
+
+2. **Via Text Message**:
+   - DM the bot with: `register myusername myemail@example.com`
+   - The bot will process your registration request
+
+**What you'll receive:**
+- A summary showing which services you were registered on
+- Services where you already had an account (skipped)
+- Any services that failed (with error details)
+- Your generated password (shown as a spoiler for security)
+
 ## Development
+
+### Discord Developer Portal Setup
+
+For basic bot functionality, no special setup is needed beyond creating the bot and inviting it to your server.
+
+**For Registration Feature (Required):**
+
+The registration feature requires the **Message Content Intent** to read DM messages. This is a privileged intent that must be enabled manually:
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+2. Select your bot application
+3. Navigate to **Bot** in the left sidebar
+4. Scroll down to **Privileged Gateway Intents**
+5. Enable **Message Content Intent**
+6. Click **Save Changes**
+
+![Message Content Intent Setting](https://i.imgur.com/example.png)
+
+**Why is this required?**
+- Discord requires explicit opt-in for bots to read message content
+- The registration feature parses DM messages like `register username email@example.com`
+- The slash command `/register` works without this intent, but text-based registration requires it
+
+**Note:** Bots in 100+ servers require verification to use privileged intents. For smaller servers, you can enable it immediately.
 
 ### Running Tests
 
@@ -401,6 +532,28 @@ Tests run automatically on every push and pull request via GitHub Actions. The C
 - Some servers hide player lists - this is a server-side setting
 - Verify the polling interval isn't too long (default: 30 seconds)
 - Check that `announcement_channel_id` is configured for Minecraft
+
+### Registration not working
+
+**"Registration is not available" message:**
+- Ensure `registration.enabled` is set to `true` in config
+- At least one service (Jellyfin, NextCloud, Navidrome, or Romm) must be enabled
+- Restart the bot after changing configuration
+
+**Bot doesn't respond to DM messages:**
+- Enable **Message Content Intent** in Discord Developer Portal (see [setup instructions](#discord-developer-portal-setup))
+- The `/register` slash command should still work without this intent
+
+**"Failed to register on [service]" errors:**
+- Verify the service URL is accessible from where the bot runs
+- Check admin credentials have permission to create users
+- For NextCloud: Ensure the admin user has user provisioning rights
+- For Navidrome: Admin user must have admin role
+- For Romm: Admin credentials must be valid OAuth2 credentials
+
+**User already exists:**
+- This is expected behavior - the bot skips services where the username already exists
+- The response will show which services were skipped vs newly registered
 
 ### Updating the Bot
 

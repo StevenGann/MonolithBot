@@ -59,6 +59,8 @@ See Also:
     - bot.cogs.jellyfin.announcements: Similar cog for new content announcements
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional

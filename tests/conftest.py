@@ -5,6 +5,8 @@ This module provides reusable fixtures for testing the bot's components,
 including mock configurations, Discord objects, and Jellyfin responses.
 """
 
+from __future__ import annotations
+
 import pytest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +21,10 @@ from bot.config import (
     MinecraftConfig,
     MinecraftScheduleConfig,
     MinecraftServerConfig,
+    NextCloudConfig,
+    NavidromeConfig,
+    RommConfig,
+    RegistrationConfig,
 )
 from bot.services.jellyfin import JellyfinItem, ServerInfo
 
@@ -98,16 +104,65 @@ def minecraft_config(
 
 
 @pytest.fixture
+def nextcloud_config() -> NextCloudConfig:
+    """Create a mock NextCloud configuration."""
+    return NextCloudConfig(
+        enabled=False,  # Disabled by default in tests
+        urls=["http://nextcloud.local"],
+        admin_user="admin",
+        admin_password="test-password",
+    )
+
+
+@pytest.fixture
+def navidrome_config() -> NavidromeConfig:
+    """Create a mock Navidrome configuration."""
+    return NavidromeConfig(
+        enabled=False,  # Disabled by default in tests
+        urls=["http://navidrome.local"],
+        admin_user="admin",
+        admin_password="test-password",
+    )
+
+
+@pytest.fixture
+def romm_config() -> RommConfig:
+    """Create a mock Romm configuration."""
+    return RommConfig(
+        enabled=False,  # Disabled by default in tests
+        urls=["http://romm.local"],
+        admin_user="admin",
+        admin_password="test-password",
+    )
+
+
+@pytest.fixture
+def registration_config() -> RegistrationConfig:
+    """Create a mock Registration configuration."""
+    return RegistrationConfig(
+        enabled=False,  # Disabled by default in tests
+    )
+
+
+@pytest.fixture
 def config(
     discord_config: DiscordConfig,
     jellyfin_config: JellyfinConfig,
     minecraft_config: MinecraftConfig,
+    nextcloud_config: NextCloudConfig,
+    navidrome_config: NavidromeConfig,
+    romm_config: RommConfig,
+    registration_config: RegistrationConfig,
 ) -> Config:
     """Create a complete mock configuration."""
     return Config(
         discord=discord_config,
         jellyfin=jellyfin_config,
         minecraft=minecraft_config,
+        nextcloud=nextcloud_config,
+        navidrome=navidrome_config,
+        romm=romm_config,
+        registration=registration_config,
     )
 
 
@@ -153,6 +208,27 @@ def config_json() -> dict[str, Any]:
                 "health_check_interval_minutes": 2,
                 "player_check_interval_seconds": 15,
             },
+        },
+        "nextcloud": {
+            "enabled": False,
+            "urls": ["http://nextcloud.example.com"],
+            "admin_user": "admin",
+            "admin_password": "test-admin-password",
+        },
+        "navidrome": {
+            "enabled": False,
+            "urls": ["http://navidrome.example.com"],
+            "admin_user": "admin",
+            "admin_password": "test-admin-password",
+        },
+        "romm": {
+            "enabled": False,
+            "urls": ["http://romm.example.com"],
+            "admin_user": "admin",
+            "admin_password": "test-admin-password",
+        },
+        "registration": {
+            "enabled": False,
         },
     }
 

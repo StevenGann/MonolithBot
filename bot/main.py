@@ -1,5 +1,5 @@
 """
-MonolithBot - Discord bot for Jellyfin and Minecraft server monitoring.
+MonolithBot - Discord bot for Jellyfin, Minecraft, and multi-service user registration.
 
 This module serves as the entry point for MonolithBot, handling:
 - Command-line argument parsing
@@ -23,7 +23,10 @@ See Also:
     - bot.cogs.jellyfin.suggestions: Random content suggestions
     - bot.cogs.minecraft.health: Minecraft server health monitoring
     - bot.cogs.minecraft.players: Minecraft player join announcements
+    - bot.cogs.registration.handler: Multi-service user registration via DM
 """
+
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -40,6 +43,10 @@ from discord.ext import commands
 from bot.config import Config, ConfigurationError, load_config
 from bot.services.jellyfin import JellyfinService
 from bot.services.minecraft import MinecraftService
+from bot.services.nextcloud import NextCloudService
+from bot.services.navidrome import NavidromeService
+from bot.services.romm import RommService
+from bot.services.registration import RegistrationService
 
 if TYPE_CHECKING:
     pass
@@ -108,6 +115,14 @@ class MonolithBot(commands.Bot):
             None if Jellyfin integration is disabled.
         minecraft_service: Shared MinecraftService instance for Minecraft cogs.
             None if Minecraft integration is disabled.
+        nextcloud_service: Shared NextCloudService instance for user registration.
+            None if NextCloud integration is disabled.
+        navidrome_service: Shared NavidromeService instance for user registration.
+            None if Navidrome integration is disabled.
+        romm_service: Shared RommService instance for user registration.
+            None if Romm integration is disabled.
+        registration_service: Shared RegistrationService instance for multi-service registration.
+            None if registration feature is disabled.
         test_modes: TestModes instance controlling which tests run on startup.
         test_mode: Convenience property that returns True if any test mode is enabled.
 
@@ -128,12 +143,14 @@ class MonolithBot(commands.Bot):
                 If None, no tests are run.
         """
         # Configure Discord intents
-        # We only need default intents for slash commands and sending messages
-        # message_content is NOT required (and needs manual approval in Discord portal)
+        # We need default intents for slash commands and sending messages
         intents = discord.Intents.default()
         # Explicitly ensure we have guild-related intents
         intents.guilds = True
         intents.guild_messages = True
+        # Enable DM-related intents for registration feature
+        intents.dm_messages = True
+        intents.message_content = True  # Required to read DM content
 
         super().__init__(
             command_prefix="!",
@@ -148,6 +165,10 @@ class MonolithBot(commands.Bot):
         # Shared service instances (initialized in setup_hook if enabled)
         self.jellyfin_service: Optional[JellyfinService] = None
         self.minecraft_service: Optional[MinecraftService] = None
+        self.nextcloud_service: Optional[NextCloudService] = None
+        self.navidrome_service: Optional[NavidromeService] = None
+        self.romm_service: Optional[RommService] = None
+        self.registration_service: Optional[RegistrationService] = None
 
     @property
     def test_mode(self) -> bool:
@@ -189,6 +210,47 @@ class MonolithBot(commands.Bot):
                 f"Minecraft service initialized with {len(self.config.minecraft.servers)} server(s)"
             )
 
+        # Initialize registration-related services
+        if self.config.nextcloud.enabled:
+            self.nextcloud_service = NextCloudService(
+                urls=self.config.nextcloud.urls,
+                admin_user=self.config.nextcloud.admin_user,
+                admin_password=self.config.nextcloud.admin_password,
+            )
+            logger.info(
+                f"NextCloud service initialized with {len(self.config.nextcloud.urls)} URL(s)"
+            )
+
+        if self.config.navidrome.enabled:
+            self.navidrome_service = NavidromeService(
+                urls=self.config.navidrome.urls,
+                admin_user=self.config.navidrome.admin_user,
+                admin_password=self.config.navidrome.admin_password,
+            )
+            logger.info(
+                f"Navidrome service initialized with {len(self.config.navidrome.urls)} URL(s)"
+            )
+
+        if self.config.romm.enabled:
+            self.romm_service = RommService(
+                urls=self.config.romm.urls,
+                admin_user=self.config.romm.admin_user,
+                admin_password=self.config.romm.admin_password,
+            )
+            logger.info(
+                f"Romm service initialized with {len(self.config.romm.urls)} URL(s)"
+            )
+
+        # Initialize the registration orchestrator service
+        if self.config.registration.enabled:
+            self.registration_service = RegistrationService(
+                jellyfin_service=self.jellyfin_service,
+                nextcloud_service=self.nextcloud_service,
+                navidrome_service=self.navidrome_service,
+                romm_service=self.romm_service,
+            )
+            logger.info("Registration service initialized")
+
         logger.info("Loading cogs...")
 
         # List of cog modules to load
@@ -217,6 +279,12 @@ class MonolithBot(commands.Bot):
             logger.info("Minecraft integration enabled - loading Minecraft cogs")
         else:
             logger.info("Minecraft integration disabled - skipping Minecraft cogs")
+
+        if self.config.registration.enabled:
+            cogs_to_load.append("bot.cogs.registration.handler")
+            logger.info("Registration feature enabled - loading Registration cog")
+        else:
+            logger.info("Registration feature disabled - skipping Registration cog")
 
         for cog in cogs_to_load:
             try:
@@ -446,6 +514,18 @@ class MonolithBot(commands.Bot):
         if self.jellyfin_service:
             await self.jellyfin_service.close()
             logger.info("Jellyfin service closed")
+
+        if self.nextcloud_service:
+            await self.nextcloud_service.close()
+            logger.info("NextCloud service closed")
+
+        if self.navidrome_service:
+            await self.navidrome_service.close()
+            logger.info("Navidrome service closed")
+
+        if self.romm_service:
+            await self.romm_service.close()
+            logger.info("Romm service closed")
 
         # MinecraftService doesn't need explicit close (no persistent connections)
         if self.minecraft_service:
@@ -710,6 +790,22 @@ def main() -> NoReturn | None:
         )
         logger.info(f"Timezone: {config.jellyfin.schedule.timezone}")
         logger.info(f"Content types: {', '.join(config.jellyfin.content_types)}")
+
+    logger.info(f"Registration enabled: {config.registration.enabled}")
+    if config.registration.enabled:
+        enabled_services = []
+        if config.jellyfin.enabled:
+            enabled_services.append("Jellyfin")
+        if config.nextcloud.enabled:
+            enabled_services.append("NextCloud")
+        if config.navidrome.enabled:
+            enabled_services.append("Navidrome")
+        if config.romm.enabled:
+            enabled_services.append("Romm")
+        if enabled_services:
+            logger.info(f"Registration services: {', '.join(enabled_services)}")
+        else:
+            logger.warning("Registration enabled but no services are configured!")
 
     # Build test modes from command-line arguments
     test_modes = build_test_modes(args)

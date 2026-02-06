@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Jellyfin health monitoring cog for server status.
 

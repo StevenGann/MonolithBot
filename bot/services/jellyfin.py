@@ -44,6 +44,8 @@ See Also:
     - bot.cogs.jellyfin.health: Uses this service for health monitoring
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -370,6 +372,103 @@ class JellyfinClient:
             version=data.get("Version", "Unknown"),
             operating_system=data.get("OperatingSystem"),
         )
+
+    # -------------------------------------------------------------------------
+    # User Management Methods
+    # -------------------------------------------------------------------------
+
+    async def get_users(self) -> list[dict]:
+        """
+        Get list of all users on the Jellyfin server.
+
+        Returns:
+            List of user dictionaries with fields like 'Id', 'Name', etc.
+
+        Raises:
+            JellyfinConnectionError: If the server is unreachable.
+            JellyfinAuthError: If the API key lacks permissions.
+            JellyfinError: For other errors.
+
+        Example:
+            >>> users = await client.get_users()
+            >>> for user in users:
+            ...     print(f"{user['Name']} (ID: {user['Id']})")
+        """
+        data = await self._request("GET", "/Users")
+        return data if isinstance(data, list) else []
+
+    async def user_exists(self, username: str) -> bool:
+        """
+        Check if a user with the given username exists.
+
+        Args:
+            username: The username to check (case-insensitive).
+
+        Returns:
+            True if a user with that name exists, False otherwise.
+
+        Example:
+            >>> if await client.user_exists("john"):
+            ...     print("User john already exists")
+        """
+        users = await self.get_users()
+        username_lower = username.lower()
+        return any(
+            user.get("Name", "").lower() == username_lower
+            for user in users
+        )
+
+    async def create_user(self, username: str, password: str) -> dict:
+        """
+        Create a new user on the Jellyfin server.
+
+        Args:
+            username: The username for the new user. Must be unique.
+            password: The password for the new user.
+
+        Returns:
+            Dictionary containing the created user's data, including 'Id'.
+
+        Raises:
+            JellyfinError: If the user already exists or creation fails.
+            JellyfinAuthError: If the API key lacks user creation permissions.
+            JellyfinConnectionError: If the server is unreachable.
+
+        Example:
+            >>> user = await client.create_user("newuser", "securepassword")
+            >>> print(f"Created user {user['Name']} with ID {user['Id']}")
+        """
+        logger.info(f"Creating Jellyfin user: {username}")
+
+        # Check if user already exists
+        if await self.user_exists(username):
+            raise JellyfinError(f"User '{username}' already exists")
+
+        # Create the user
+        # Jellyfin API: POST /Users/New with JSON body {"Name": "username"}
+        data = await self._request(
+            "POST",
+            "/Users/New",
+            json={"Name": username},
+        )
+
+        user_id = data.get("Id")
+        if not user_id:
+            raise JellyfinError("Failed to create user: no user ID returned")
+
+        # Set the user's password
+        # Jellyfin API: POST /Users/{userId}/Password with JSON body
+        await self._request(
+            "POST",
+            f"/Users/{user_id}/Password",
+            json={
+                "CurrentPw": "",  # Empty for new users
+                "NewPw": password,
+            },
+        )
+
+        logger.info(f"Successfully created Jellyfin user: {username} (ID: {user_id})")
+        return data
 
     async def get_recent_items(
         self,
@@ -1179,6 +1278,46 @@ class JellyfinService:
             f"{base_url}/web/index.html#!/list.html"
             f"?type={jellyfin_type}&sortBy=DateCreated&sortOrder=Descending"
         )
+
+    # -------------------------------------------------------------------------
+    # User Management Methods
+    # -------------------------------------------------------------------------
+
+    async def get_users(self) -> list[dict]:
+        """
+        Get list of all users on the Jellyfin server.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.get_users for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.get_users()
+
+    async def user_exists(self, username: str) -> bool:
+        """
+        Check if a user with the given username exists.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.user_exists for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.user_exists(username)
+
+    async def create_user(self, username: str, password: str) -> dict:
+        """
+        Create a new user on the Jellyfin server.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.create_user for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.create_user(username, password)
 
     # -------------------------------------------------------------------------
     # Lifecycle

@@ -57,6 +57,8 @@ See Also:
     - ARCHITECTURE.md: Configuration system documentation
 """
 
+from __future__ import annotations  # Enable PEP 604 style type hints for Python 3.8+
+
 import json
 import os
 from dataclasses import dataclass, field
@@ -235,6 +237,125 @@ class MinecraftConfig:
 
 
 @dataclass
+class NextCloudConfig:
+    """
+    NextCloud server configuration for user provisioning.
+
+    Uses the NextCloud OCS Provisioning API for user management.
+    Requires admin credentials with user provisioning permissions.
+
+    Attributes:
+        enabled: Whether NextCloud integration is enabled.
+        urls: List of NextCloud server URLs to try in order (for failover).
+            Each URL should be the base URL like "https://nextcloud.example.com".
+        admin_user: Admin username for OCS API authentication.
+        admin_password: Admin password for OCS API authentication.
+
+    See Also:
+        - NextCloud OCS API: https://docs.nextcloud.com/server/latest/admin_manual/
+    """
+
+    enabled: bool
+    urls: list[str] = field(default_factory=list)
+    admin_user: str = ""
+    admin_password: str = ""
+
+    def __post_init__(self) -> None:
+        """Normalize all URLs by removing trailing slashes."""
+        self.urls = [url.rstrip("/") for url in self.urls]
+
+    @property
+    def url(self) -> str:
+        """Get the primary (first) URL for backward compatibility."""
+        return self.urls[0] if self.urls else ""
+
+
+@dataclass
+class NavidromeConfig:
+    """
+    Navidrome server configuration for user provisioning.
+
+    Uses the Navidrome REST API for user management.
+    Requires admin credentials with user management permissions.
+
+    Attributes:
+        enabled: Whether Navidrome integration is enabled.
+        urls: List of Navidrome server URLs to try in order (for failover).
+            Each URL should be the base URL like "https://navidrome.example.com".
+        admin_user: Admin username for API authentication.
+        admin_password: Admin password for API authentication.
+
+    See Also:
+        - Navidrome API documentation
+    """
+
+    enabled: bool
+    urls: list[str] = field(default_factory=list)
+    admin_user: str = ""
+    admin_password: str = ""
+
+    def __post_init__(self) -> None:
+        """Normalize all URLs by removing trailing slashes."""
+        self.urls = [url.rstrip("/") for url in self.urls]
+
+    @property
+    def url(self) -> str:
+        """Get the primary (first) URL for backward compatibility."""
+        return self.urls[0] if self.urls else ""
+
+
+@dataclass
+class RommConfig:
+    """
+    Romm server configuration for user provisioning.
+
+    Uses the Romm REST API for user management.
+    Requires admin credentials or API key with user management permissions.
+
+    Attributes:
+        enabled: Whether Romm integration is enabled.
+        urls: List of Romm server URLs to try in order (for failover).
+            Each URL should be the base URL like "https://romm.example.com".
+        admin_user: Admin username for API authentication.
+        admin_password: Admin password for API authentication.
+
+    See Also:
+        - Romm GitHub: https://github.com/rommapp/romm
+    """
+
+    enabled: bool
+    urls: list[str] = field(default_factory=list)
+    admin_user: str = ""
+    admin_password: str = ""
+
+    def __post_init__(self) -> None:
+        """Normalize all URLs by removing trailing slashes."""
+        self.urls = [url.rstrip("/") for url in self.urls]
+
+    @property
+    def url(self) -> str:
+        """Get the primary (first) URL for backward compatibility."""
+        return self.urls[0] if self.urls else ""
+
+
+@dataclass
+class RegistrationConfig:
+    """
+    Configuration for the multi-service user registration feature.
+
+    When enabled, users can DM the bot with a username and email to
+    automatically create accounts on all enabled services.
+
+    Attributes:
+        enabled: Whether the registration feature is enabled.
+            Requires at least one service (Jellyfin, NextCloud, Navidrome, Romm)
+            to also be enabled.
+    """
+
+    enabled: bool = False
+
+
+@dataclass
 class Config:
     """
     Main configuration container aggregating all settings.
@@ -246,6 +367,10 @@ class Config:
         discord: Discord bot and channel settings.
         jellyfin: Jellyfin server connection and schedule settings.
         minecraft: Minecraft server monitoring settings.
+        nextcloud: NextCloud server connection settings for user provisioning.
+        navidrome: Navidrome server connection settings for user provisioning.
+        romm: Romm server connection settings for user provisioning.
+        registration: Multi-service user registration feature settings.
 
     Example:
         >>> config = load_config(Path("config.json"))
@@ -257,11 +382,17 @@ class Config:
         ['Movie', 'Series', 'Audio']
         >>> print(config.minecraft.servers[0].name)
         'Survival'
+        >>> print(config.registration.enabled)
+        False
     """
 
     discord: DiscordConfig
     jellyfin: JellyfinConfig
     minecraft: MinecraftConfig
+    nextcloud: NextCloudConfig
+    navidrome: NavidromeConfig
+    romm: RommConfig
+    registration: RegistrationConfig
 
 
 # =============================================================================
@@ -753,6 +884,255 @@ def _build_minecraft_config(json_config: dict[str, Any]) -> MinecraftConfig:
     )
 
 
+def _build_nextcloud_config(json_config: dict[str, Any]) -> NextCloudConfig:
+    """
+    Build NextCloud configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        Populated NextCloudConfig object.
+
+    Raises:
+        ConfigurationError: If NextCloud is enabled but required credentials
+            are not properly configured.
+
+    Environment Variables:
+        - NEXTCLOUD_ENABLED: Whether NextCloud integration is enabled
+        - NEXTCLOUD_URL: NextCloud server URL(s), comma-separated for failover
+        - NEXTCLOUD_ADMIN_USER: Admin username for OCS API
+        - NEXTCLOUD_ADMIN_PASSWORD: Admin password for OCS API
+    """
+    nextcloud_json = json_config.get("nextcloud", {})
+
+    # Check if enabled (defaults to False)
+    enabled_env = _get_env_bool("NEXTCLOUD_ENABLED")
+    enabled = (
+        enabled_env if enabled_env is not None else nextcloud_json.get("enabled", False)
+    )
+
+    # URLs: env var takes precedence, supports comma-separated list
+    urls_from_env = _get_env_list("NEXTCLOUD_URL")
+    if urls_from_env:
+        urls = urls_from_env
+    else:
+        urls_from_json = nextcloud_json.get("urls")
+        if urls_from_json is not None:
+            if isinstance(urls_from_json, list):
+                urls = urls_from_json
+            else:
+                urls = [urls_from_json]
+        else:
+            url_from_json = nextcloud_json.get("url")
+            if url_from_json:
+                urls = [url_from_json] if isinstance(url_from_json, str) else url_from_json
+            else:
+                urls = []
+
+    if enabled and not urls:
+        raise ConfigurationError(
+            "NextCloud URL is required when enabled. Set NEXTCLOUD_URL environment "
+            "variable or 'nextcloud.url'/'nextcloud.urls' in config.json"
+        )
+
+    # Admin credentials
+    admin_user = _get_env("NEXTCLOUD_ADMIN_USER") or nextcloud_json.get("admin_user", "")
+    admin_password = (
+        _get_env("NEXTCLOUD_ADMIN_PASSWORD") or nextcloud_json.get("admin_password", "")
+    )
+
+    if enabled and (not admin_user or not admin_password):
+        raise ConfigurationError(
+            "NextCloud admin credentials are required when enabled. Set "
+            "NEXTCLOUD_ADMIN_USER and NEXTCLOUD_ADMIN_PASSWORD environment variables "
+            "or 'nextcloud.admin_user' and 'nextcloud.admin_password' in config.json"
+        )
+
+    return NextCloudConfig(
+        enabled=enabled,
+        urls=urls,
+        admin_user=admin_user,
+        admin_password=admin_password,
+    )
+
+
+def _build_navidrome_config(json_config: dict[str, Any]) -> NavidromeConfig:
+    """
+    Build Navidrome configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        Populated NavidromeConfig object.
+
+    Raises:
+        ConfigurationError: If Navidrome is enabled but required credentials
+            are not properly configured.
+
+    Environment Variables:
+        - NAVIDROME_ENABLED: Whether Navidrome integration is enabled
+        - NAVIDROME_URL: Navidrome server URL(s), comma-separated for failover
+        - NAVIDROME_ADMIN_USER: Admin username for API
+        - NAVIDROME_ADMIN_PASSWORD: Admin password for API
+    """
+    navidrome_json = json_config.get("navidrome", {})
+
+    # Check if enabled (defaults to False)
+    enabled_env = _get_env_bool("NAVIDROME_ENABLED")
+    enabled = (
+        enabled_env if enabled_env is not None else navidrome_json.get("enabled", False)
+    )
+
+    # URLs: env var takes precedence, supports comma-separated list
+    urls_from_env = _get_env_list("NAVIDROME_URL")
+    if urls_from_env:
+        urls = urls_from_env
+    else:
+        urls_from_json = navidrome_json.get("urls")
+        if urls_from_json is not None:
+            if isinstance(urls_from_json, list):
+                urls = urls_from_json
+            else:
+                urls = [urls_from_json]
+        else:
+            url_from_json = navidrome_json.get("url")
+            if url_from_json:
+                urls = [url_from_json] if isinstance(url_from_json, str) else url_from_json
+            else:
+                urls = []
+
+    if enabled and not urls:
+        raise ConfigurationError(
+            "Navidrome URL is required when enabled. Set NAVIDROME_URL environment "
+            "variable or 'navidrome.url'/'navidrome.urls' in config.json"
+        )
+
+    # Admin credentials
+    admin_user = _get_env("NAVIDROME_ADMIN_USER") or navidrome_json.get("admin_user", "")
+    admin_password = (
+        _get_env("NAVIDROME_ADMIN_PASSWORD") or navidrome_json.get("admin_password", "")
+    )
+
+    if enabled and (not admin_user or not admin_password):
+        raise ConfigurationError(
+            "Navidrome admin credentials are required when enabled. Set "
+            "NAVIDROME_ADMIN_USER and NAVIDROME_ADMIN_PASSWORD environment variables "
+            "or 'navidrome.admin_user' and 'navidrome.admin_password' in config.json"
+        )
+
+    return NavidromeConfig(
+        enabled=enabled,
+        urls=urls,
+        admin_user=admin_user,
+        admin_password=admin_password,
+    )
+
+
+def _build_romm_config(json_config: dict[str, Any]) -> RommConfig:
+    """
+    Build Romm configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        Populated RommConfig object.
+
+    Raises:
+        ConfigurationError: If Romm is enabled but required credentials
+            are not properly configured.
+
+    Environment Variables:
+        - ROMM_ENABLED: Whether Romm integration is enabled
+        - ROMM_URL: Romm server URL(s), comma-separated for failover
+        - ROMM_ADMIN_USER: Admin username for API
+        - ROMM_ADMIN_PASSWORD: Admin password for API
+    """
+    romm_json = json_config.get("romm", {})
+
+    # Check if enabled (defaults to False)
+    enabled_env = _get_env_bool("ROMM_ENABLED")
+    enabled = enabled_env if enabled_env is not None else romm_json.get("enabled", False)
+
+    # URLs: env var takes precedence, supports comma-separated list
+    urls_from_env = _get_env_list("ROMM_URL")
+    if urls_from_env:
+        urls = urls_from_env
+    else:
+        urls_from_json = romm_json.get("urls")
+        if urls_from_json is not None:
+            if isinstance(urls_from_json, list):
+                urls = urls_from_json
+            else:
+                urls = [urls_from_json]
+        else:
+            url_from_json = romm_json.get("url")
+            if url_from_json:
+                urls = [url_from_json] if isinstance(url_from_json, str) else url_from_json
+            else:
+                urls = []
+
+    if enabled and not urls:
+        raise ConfigurationError(
+            "Romm URL is required when enabled. Set ROMM_URL environment "
+            "variable or 'romm.url'/'romm.urls' in config.json"
+        )
+
+    # Admin credentials
+    admin_user = _get_env("ROMM_ADMIN_USER") or romm_json.get("admin_user", "")
+    admin_password = _get_env("ROMM_ADMIN_PASSWORD") or romm_json.get("admin_password", "")
+
+    if enabled and (not admin_user or not admin_password):
+        raise ConfigurationError(
+            "Romm admin credentials are required when enabled. Set "
+            "ROMM_ADMIN_USER and ROMM_ADMIN_PASSWORD environment variables "
+            "or 'romm.admin_user' and 'romm.admin_password' in config.json"
+        )
+
+    return RommConfig(
+        enabled=enabled,
+        urls=urls,
+        admin_user=admin_user,
+        admin_password=admin_password,
+    )
+
+
+def _build_registration_config(json_config: dict[str, Any]) -> RegistrationConfig:
+    """
+    Build registration feature configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        Populated RegistrationConfig object.
+
+    Environment Variables:
+        - REGISTRATION_ENABLED: Whether registration feature is enabled
+    """
+    registration_json = json_config.get("registration", {})
+
+    # Check if enabled (defaults to False)
+    enabled_env = _get_env_bool("REGISTRATION_ENABLED")
+    enabled = (
+        enabled_env
+        if enabled_env is not None
+        else registration_json.get("enabled", False)
+    )
+
+    return RegistrationConfig(enabled=enabled)
+
+
 # =============================================================================
 # Public API
 # =============================================================================
@@ -792,6 +1172,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         >>> print(config.jellyfin.schedule.announcement_times)
         >>> print(config.jellyfin.content_types)
         >>> print(config.minecraft.servers[0].name)
+        >>> print(config.registration.enabled)
     """
     if config_path is None:
         config_path = Path("config.json")
@@ -803,9 +1184,17 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     discord_config = _build_discord_config(json_config)
     jellyfin_config = _build_jellyfin_config(json_config)
     minecraft_config = _build_minecraft_config(json_config)
+    nextcloud_config = _build_nextcloud_config(json_config)
+    navidrome_config = _build_navidrome_config(json_config)
+    romm_config = _build_romm_config(json_config)
+    registration_config = _build_registration_config(json_config)
 
     return Config(
         discord=discord_config,
         jellyfin=jellyfin_config,
         minecraft=minecraft_config,
+        nextcloud=nextcloud_config,
+        navidrome=navidrome_config,
+        romm=romm_config,
+        registration=registration_config,
     )

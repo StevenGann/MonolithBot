@@ -21,10 +21,11 @@ Example:
     >>> scheduler.start()
 
 See Also:
-    - APScheduler documentation: https://apscheduler.readthedocs.io/
-    - bot.cogs.jellyfin.announcements: Uses CronTrigger for scheduled announcements
-    - bot.cogs.jellyfin.health: Uses IntervalTrigger for periodic health checks
+    - APScheduler docs: https://apscheduler.readthedocs.io/
+    - bot.cogs.jellyfin: Uses scheduler for Jellyfin announcements
 """
+
+from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING

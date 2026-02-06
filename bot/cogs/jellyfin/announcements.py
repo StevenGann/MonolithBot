@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Jellyfin announcements cog for scheduled content notifications.
 
