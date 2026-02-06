@@ -470,6 +470,78 @@ class JellyfinClient:
         logger.info(f"Successfully created Jellyfin user: {username} (ID: {user_id})")
         return data
 
+    async def get_user_id(self, username: str) -> Optional[str]:
+        """
+        Get the user ID for a given username.
+
+        Args:
+            username: The username to look up (case-insensitive).
+
+        Returns:
+            The user's ID if found, None otherwise.
+
+        Example:
+            >>> user_id = await client.get_user_id("john")
+            >>> if user_id:
+            ...     print(f"User ID: {user_id}")
+        """
+        users = await self.get_users()
+        username_lower = username.lower()
+        for user in users:
+            if user.get("Name", "").lower() == username_lower:
+                return user.get("Id")
+        return None
+
+    async def set_password(self, username: str, new_password: str) -> bool:
+        """
+        Set a new password for an existing user.
+
+        Args:
+            username: The username of the user to update.
+            new_password: The new password to set.
+
+        Returns:
+            True if the password was successfully set.
+
+        Raises:
+            JellyfinError: If the user doesn't exist or update fails.
+            JellyfinAuthError: If the API key lacks permissions.
+            JellyfinConnectionError: If the server is unreachable.
+
+        Example:
+            >>> await client.set_password("john", "newSecurePassword123")
+        """
+        logger.info(f"Setting password for Jellyfin user: {username}")
+
+        # Get the user ID
+        user_id = await self.get_user_id(username)
+        if not user_id:
+            raise JellyfinError(f"User '{username}' not found")
+
+        # Reset the user's password
+        # Jellyfin API: POST /Users/{userId}/Password with ResetPassword=true
+        # first resets to empty, then we set the new password
+        await self._request(
+            "POST",
+            f"/Users/{user_id}/Password",
+            json={
+                "ResetPassword": True,
+            },
+        )
+
+        # Now set the new password
+        await self._request(
+            "POST",
+            f"/Users/{user_id}/Password",
+            json={
+                "CurrentPw": "",
+                "NewPw": new_password,
+            },
+        )
+
+        logger.info(f"Successfully set password for Jellyfin user: {username}")
+        return True
+
     async def get_recent_items(
         self,
         item_type: str,
@@ -1318,6 +1390,30 @@ class JellyfinService:
         """
         client = await self._ensure_client()
         return await client.create_user(username, password)
+
+    async def get_user_id(self, username: str) -> Optional[str]:
+        """
+        Get the user ID for a given username.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.get_user_id for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.get_user_id(username)
+
+    async def set_password(self, username: str, new_password: str) -> bool:
+        """
+        Set a new password for an existing user.
+
+        Delegates to the underlying JellyfinClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See JellyfinClient.set_password for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.set_password(username, new_password)
 
     # -------------------------------------------------------------------------
     # Lifecycle

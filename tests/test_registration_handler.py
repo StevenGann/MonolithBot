@@ -69,6 +69,9 @@ def mock_dm_message(mock_dm_channel: MagicMock) -> MagicMock:
     """Create a mock DM message."""
     message = MagicMock(spec=discord.Message)
     message.author.bot = False
+    message.author.id = 123456789  # Use a real int for JSON serialization
+    message.author.name = "TestUser"
+    message.author.__str__ = MagicMock(return_value="TestUser#1234")
     message.channel = mock_dm_channel
     message.content = "register testuser test@example.com"
     return message

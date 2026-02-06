@@ -552,6 +552,72 @@ class NavidromeClient:
             for user in users
         ]
 
+    async def get_user_id(self, user_name: str) -> Optional[str]:
+        """
+        Get the user ID for a given username.
+
+        Args:
+            user_name: The username to look up (case-insensitive).
+
+        Returns:
+            The user's ID if found, None otherwise.
+
+        Example:
+            >>> user_id = await client.get_user_id("john")
+            >>> if user_id:
+            ...     print(f"User ID: {user_id}")
+        """
+        try:
+            data = await self._request("GET", "/api/user")
+            users = data if isinstance(data, list) else []
+
+            user_name_lower = user_name.lower()
+            for user in users:
+                if user.get("userName", "").lower() == user_name_lower:
+                    return user.get("id")
+
+            return None
+        except NavidromeError:
+            return None
+
+    async def set_password(self, user_name: str, new_password: str) -> bool:
+        """
+        Set a new password for an existing user.
+
+        Args:
+            user_name: The username of the user to update.
+            new_password: The new password to set.
+
+        Returns:
+            True if the password was successfully set.
+
+        Raises:
+            NavidromeError: If the user doesn't exist or update fails.
+            NavidromeAuthError: If admin credentials are invalid.
+            NavidromeConnectionError: If unable to connect.
+
+        Example:
+            >>> await client.set_password("john", "newSecurePassword123")
+        """
+        logger.info(f"Setting password for Navidrome user: {user_name}")
+
+        # Get the user ID
+        user_id = await self.get_user_id(user_name)
+        if not user_id:
+            raise NavidromeError(f"User '{user_name}' not found")
+
+        # Navidrome API: PUT /api/user/{id} with JSON body
+        await self._request(
+            "PUT",
+            f"/api/user/{user_id}",
+            json={
+                "password": new_password,
+            },
+        )
+
+        logger.info(f"Successfully set password for Navidrome user: {user_name}")
+        return True
+
 
 # =============================================================================
 # Navidrome Service (Multi-URL Failover)
@@ -783,6 +849,30 @@ class NavidromeService:
         """
         client = await self._ensure_client()
         return await client.get_users()
+
+    async def get_user_id(self, user_name: str) -> Optional[str]:
+        """
+        Get the user ID for a given username.
+
+        Delegates to the underlying NavidromeClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See NavidromeClient.get_user_id for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.get_user_id(user_name)
+
+    async def set_password(self, user_name: str, new_password: str) -> bool:
+        """
+        Set a new password for an existing user.
+
+        Delegates to the underlying NavidromeClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See NavidromeClient.set_password for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.set_password(user_name, new_password)
 
     async def close(self) -> None:
         """

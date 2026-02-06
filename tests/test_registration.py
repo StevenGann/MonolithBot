@@ -514,3 +514,276 @@ class TestValidationError:
         with pytest.raises(ValidationError) as exc_info:
             raise ValidationError("Test error message")
         assert "Test error message" in str(exc_info.value)
+
+
+# =============================================================================
+# PasswordResetResult Tests
+# =============================================================================
+
+
+class TestPasswordResetResult:
+    """Tests for PasswordResetResult dataclass."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating a basic PasswordResetResult."""
+        from bot.services.registration import PasswordResetResult
+
+        result = PasswordResetResult(
+            username="testuser",
+            password="NewSecurePass123!",
+        )
+        assert result.username == "testuser"
+        assert result.password == "NewSecurePass123!"
+        assert result.services == []
+
+    def test_any_success_with_success(self) -> None:
+        """Test any_success property when one succeeds."""
+        from bot.services.registration import PasswordResetResult
+
+        result = PasswordResetResult(
+            username="testuser",
+            password="NewSecurePass123!",
+            services=[
+                ServiceResult("Jellyfin", success=True, message="Password updated"),
+                ServiceResult("NextCloud", success=False, message="Failed"),
+            ],
+        )
+        assert result.any_success is True
+
+    def test_any_success_all_fail(self) -> None:
+        """Test any_success property when all fail."""
+        from bot.services.registration import PasswordResetResult
+
+        result = PasswordResetResult(
+            username="testuser",
+            password="NewSecurePass123!",
+            services=[
+                ServiceResult("Jellyfin", success=False, message="Failed"),
+                ServiceResult("NextCloud", success=False, message="Failed"),
+            ],
+        )
+        assert result.any_success is False
+
+    def test_all_success_true(self) -> None:
+        """Test all_success property when all succeed."""
+        from bot.services.registration import PasswordResetResult
+
+        result = PasswordResetResult(
+            username="testuser",
+            password="NewSecurePass123!",
+            services=[
+                ServiceResult("Jellyfin", success=True, message="Password updated"),
+                ServiceResult("NextCloud", success=True, message="Password updated"),
+            ],
+        )
+        assert result.all_success is True
+
+    def test_all_success_false(self) -> None:
+        """Test all_success property when one fails."""
+        from bot.services.registration import PasswordResetResult
+
+        result = PasswordResetResult(
+            username="testuser",
+            password="NewSecurePass123!",
+            services=[
+                ServiceResult("Jellyfin", success=True, message="Password updated"),
+                ServiceResult("NextCloud", success=False, message="Failed"),
+            ],
+        )
+        assert result.all_success is False
+
+    def test_successful_property(self) -> None:
+        """Test successful property returns only successful services."""
+        from bot.services.registration import PasswordResetResult
+
+        result = PasswordResetResult(
+            username="testuser",
+            password="NewSecurePass123!",
+            services=[
+                ServiceResult("Jellyfin", success=True, message="Password updated"),
+                ServiceResult("NextCloud", success=False, message="Failed"),
+                ServiceResult("Navidrome", success=True, message="Password updated"),
+            ],
+        )
+        successful = result.successful
+        assert len(successful) == 2
+        assert all(sr.success for sr in successful)
+
+    def test_failed_property(self) -> None:
+        """Test failed property returns only failed services."""
+        from bot.services.registration import PasswordResetResult
+
+        result = PasswordResetResult(
+            username="testuser",
+            password="NewSecurePass123!",
+            services=[
+                ServiceResult("Jellyfin", success=True, message="Password updated"),
+                ServiceResult("NextCloud", success=False, message="Failed"),
+                ServiceResult("Navidrome", success=False, message="Failed"),
+            ],
+        )
+        failed = result.failed
+        assert len(failed) == 2
+        assert all(not sr.success for sr in failed)
+
+
+# =============================================================================
+# RegistrationService Password Reset Tests
+# =============================================================================
+
+
+class TestRegistrationServiceResetPassword:
+    """Tests for RegistrationService.reset_password method."""
+
+    @pytest.mark.asyncio
+    async def test_reset_password_success(self) -> None:
+        """Test successful password reset on all services."""
+        jellyfin = MagicMock()
+        jellyfin.user_exists = AsyncMock(return_value=True)
+        jellyfin.set_password = AsyncMock(return_value=True)
+
+        nextcloud = MagicMock()
+        nextcloud.user_exists = AsyncMock(return_value=True)
+        nextcloud.set_password = AsyncMock(return_value=True)
+
+        service = RegistrationService(
+            jellyfin_service=jellyfin,
+            nextcloud_service=nextcloud,
+            navidrome_service=None,
+            romm_service=None,
+        )
+
+        result = await service.reset_password("testuser")
+
+        assert result.username == "testuser"
+        assert result.password is not None
+        assert len(result.password) >= 16
+        assert len(result.services) == 2
+        assert result.all_success is True
+
+        jellyfin.set_password.assert_called_once()
+        nextcloud.set_password.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_reset_password_with_custom_password(self) -> None:
+        """Test password reset with custom password."""
+        jellyfin = MagicMock()
+        jellyfin.user_exists = AsyncMock(return_value=True)
+        jellyfin.set_password = AsyncMock(return_value=True)
+
+        service = RegistrationService(
+            jellyfin_service=jellyfin,
+            nextcloud_service=None,
+            navidrome_service=None,
+            romm_service=None,
+        )
+
+        result = await service.reset_password("testuser", "MyCustomPassword123!")
+
+        assert result.password == "MyCustomPassword123!"
+        jellyfin.set_password.assert_called_once_with("testuser", "MyCustomPassword123!")
+
+    @pytest.mark.asyncio
+    async def test_reset_password_user_not_found(self) -> None:
+        """Test password reset when user doesn't exist on service."""
+        jellyfin = MagicMock()
+        jellyfin.user_exists = AsyncMock(return_value=False)
+
+        service = RegistrationService(
+            jellyfin_service=jellyfin,
+            nextcloud_service=None,
+            navidrome_service=None,
+            romm_service=None,
+        )
+
+        result = await service.reset_password("nonexistent")
+
+        assert len(result.services) == 1
+        assert result.services[0].success is False
+        assert "not found" in result.services[0].message.lower()
+
+    @pytest.mark.asyncio
+    async def test_reset_password_partial_failure(self) -> None:
+        """Test password reset with partial failure."""
+        jellyfin = MagicMock()
+        jellyfin.user_exists = AsyncMock(return_value=True)
+        jellyfin.set_password = AsyncMock(return_value=True)
+
+        nextcloud = MagicMock()
+        nextcloud.user_exists = AsyncMock(return_value=True)
+        nextcloud.set_password = AsyncMock(side_effect=Exception("Connection error"))
+
+        service = RegistrationService(
+            jellyfin_service=jellyfin,
+            nextcloud_service=nextcloud,
+            navidrome_service=None,
+            romm_service=None,
+        )
+
+        result = await service.reset_password("testuser")
+
+        assert result.any_success is True
+        assert result.all_success is False
+        assert len(result.successful) == 1
+        assert len(result.failed) == 1
+
+    @pytest.mark.asyncio
+    async def test_reset_password_no_services(self) -> None:
+        """Test password reset with no services configured."""
+        service = RegistrationService(
+            jellyfin_service=None,
+            nextcloud_service=None,
+            navidrome_service=None,
+            romm_service=None,
+        )
+
+        result = await service.reset_password("testuser")
+
+        assert result.services == []
+        assert result.any_success is False
+
+    @pytest.mark.asyncio
+    async def test_reset_password_validation_error(self) -> None:
+        """Test password reset with invalid username."""
+        service = RegistrationService(
+            jellyfin_service=MagicMock(),
+            nextcloud_service=None,
+            navidrome_service=None,
+            romm_service=None,
+        )
+
+        with pytest.raises(ValidationError):
+            await service.reset_password("")
+
+    @pytest.mark.asyncio
+    async def test_reset_password_all_services(self) -> None:
+        """Test password reset on all four services."""
+        jellyfin = MagicMock()
+        jellyfin.user_exists = AsyncMock(return_value=True)
+        jellyfin.set_password = AsyncMock(return_value=True)
+
+        nextcloud = MagicMock()
+        nextcloud.user_exists = AsyncMock(return_value=True)
+        nextcloud.set_password = AsyncMock(return_value=True)
+
+        navidrome = MagicMock()
+        navidrome.user_exists = AsyncMock(return_value=True)
+        navidrome.set_password = AsyncMock(return_value=True)
+
+        romm = MagicMock()
+        romm.user_exists = AsyncMock(return_value=True)
+        romm.set_password = AsyncMock(return_value=True)
+
+        service = RegistrationService(
+            jellyfin_service=jellyfin,
+            nextcloud_service=nextcloud,
+            navidrome_service=navidrome,
+            romm_service=romm,
+        )
+
+        result = await service.reset_password("testuser", "NewPassword123!")
+
+        assert len(result.services) == 4
+        assert result.all_success is True
+        assert all(sr.service_name in ["Jellyfin", "NextCloud", "Navidrome", "Romm"]
+                   for sr in result.services)

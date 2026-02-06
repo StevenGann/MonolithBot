@@ -467,6 +467,41 @@ class NextCloudClient:
         except NextCloudError:
             return None
 
+    async def set_password(self, user_id: str, new_password: str) -> bool:
+        """
+        Set a new password for an existing user.
+
+        Args:
+            user_id: The username of the user to update.
+            new_password: The new password to set.
+
+        Returns:
+            True if the password was successfully set.
+
+        Raises:
+            NextCloudError: If the user doesn't exist or update fails.
+            NextCloudAuthError: If admin credentials are invalid.
+            NextCloudConnectionError: If unable to connect.
+
+        Example:
+            >>> await client.set_password("john", "newSecurePassword123")
+        """
+        logger.info(f"Setting password for NextCloud user: {user_id}")
+
+        # NextCloud OCS API: PUT /ocs/v1.php/cloud/users/{userid}
+        # with key=password and value=new_password
+        await self._request(
+            "PUT",
+            f"/ocs/v1.php/cloud/users/{user_id}",
+            data={
+                "key": "password",
+                "value": new_password,
+            },
+        )
+
+        logger.info(f"Successfully set password for NextCloud user: {user_id}")
+        return True
+
 
 # =============================================================================
 # NextCloud Service (Multi-URL Failover)
@@ -698,6 +733,18 @@ class NextCloudService:
         """
         client = await self._ensure_client()
         return await client.get_user(user_id)
+
+    async def set_password(self, user_id: str, new_password: str) -> bool:
+        """
+        Set a new password for an existing user.
+
+        Delegates to the underlying NextCloudClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See NextCloudClient.set_password for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.set_password(user_id, new_password)
 
     async def close(self) -> None:
         """

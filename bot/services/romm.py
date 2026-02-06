@@ -554,6 +554,72 @@ class RommClient:
             for user in users
         ]
 
+    async def get_user_id(self, username: str) -> Optional[int]:
+        """
+        Get the user ID for a given username.
+
+        Args:
+            username: The username to look up (case-insensitive).
+
+        Returns:
+            The user's ID if found, None otherwise.
+
+        Example:
+            >>> user_id = await client.get_user_id("john")
+            >>> if user_id:
+            ...     print(f"User ID: {user_id}")
+        """
+        try:
+            data = await self._request("GET", "/api/users")
+            users = data if isinstance(data, list) else []
+
+            username_lower = username.lower()
+            for user in users:
+                if user.get("username", "").lower() == username_lower:
+                    return user.get("id")
+
+            return None
+        except RommError:
+            return None
+
+    async def set_password(self, username: str, new_password: str) -> bool:
+        """
+        Set a new password for an existing user.
+
+        Args:
+            username: The username of the user to update.
+            new_password: The new password to set.
+
+        Returns:
+            True if the password was successfully set.
+
+        Raises:
+            RommError: If the user doesn't exist or update fails.
+            RommAuthError: If admin credentials are invalid.
+            RommConnectionError: If unable to connect.
+
+        Example:
+            >>> await client.set_password("john", "newSecurePassword123")
+        """
+        logger.info(f"Setting password for Romm user: {username}")
+
+        # Get the user ID
+        user_id = await self.get_user_id(username)
+        if not user_id:
+            raise RommError(f"User '{username}' not found")
+
+        # Romm API: PUT /api/users/{id} with JSON body
+        await self._request(
+            "PUT",
+            f"/api/users/{user_id}",
+            json={
+                "password": new_password,
+            },
+        )
+
+        logger.info(f"Successfully set password for Romm user: {username}")
+        return True
+
 
 # =============================================================================
 # Romm Service (Multi-URL Failover)
@@ -783,6 +849,30 @@ class RommService:
         """
         client = await self._ensure_client()
         return await client.get_users()
+
+    async def get_user_id(self, username: str) -> Optional[int]:
+        """
+        Get the user ID for a given username.
+
+        Delegates to the underlying RommClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See RommClient.get_user_id for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.get_user_id(username)
+
+    async def set_password(self, username: str, new_password: str) -> bool:
+        """
+        Set a new password for an existing user.
+
+        Delegates to the underlying RommClient using the cached
+        active URL. If no URL is cached, triggers URL resolution first.
+
+        See RommClient.set_password for full documentation.
+        """
+        client = await self._ensure_client()
+        return await client.set_password(username, new_password)
 
     async def close(self) -> None:
         """

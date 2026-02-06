@@ -1,0 +1,18 @@
+{
+  "users": {
+    "123456789": {
+      "discord_id": 123456789,
+      "discord_name": "<MagicMock name='mock.user' id='1676988103072'>",
+      "username": "testuser",
+      "email": "test@example.com",
+      "registered_at": "2026-02-06T20:53:45.428522+00:00",
+      "services": [
+        "Jellyfin",
+        "NextCloud"
+      ]
+    }
+  },
+  "usernames": {
+    "testuser": "123456789"
+  }
+}

@@ -119,6 +119,44 @@ class RegistrationResult:
         return [sr for sr in self.services if not sr.success and not sr.already_existed]
 
 
+@dataclass
+class PasswordResetResult:
+    """
+    Aggregated result of a multi-service password reset attempt.
+
+    Attributes:
+        username: The username whose password was reset.
+        password: The new password (same across all services).
+        services: List of per-service reset results.
+        any_success: True if at least one service reset succeeded.
+        all_success: True if all enabled services succeeded.
+    """
+
+    username: str
+    password: str
+    services: list[ServiceResult] = field(default_factory=list)
+
+    @property
+    def any_success(self) -> bool:
+        """Check if at least one service password reset succeeded."""
+        return any(sr.success for sr in self.services)
+
+    @property
+    def all_success(self) -> bool:
+        """Check if all service password resets succeeded."""
+        return all(sr.success for sr in self.services)
+
+    @property
+    def successful(self) -> list[ServiceResult]:
+        """Get services where password reset succeeded."""
+        return [sr for sr in self.services if sr.success]
+
+    @property
+    def failed(self) -> list[ServiceResult]:
+        """Get services where password reset failed."""
+        return [sr for sr in self.services if not sr.success]
+
+
 # =============================================================================
 # Validation
 # =============================================================================
@@ -486,5 +524,210 @@ class RegistrationService:
                 service_name="Romm",
                 success=False,
                 message="Registration failed",
+                error=str(e),
+            )
+
+    # =========================================================================
+    # Password Reset
+    # =========================================================================
+
+    async def reset_password(
+        self,
+        username: str,
+        password: Optional[str] = None,
+    ) -> PasswordResetResult:
+        """
+        Reset a user's password across all enabled services.
+
+        Generates a new password (if not provided) and attempts to set it
+        on all enabled services where the user has an account.
+
+        Args:
+            username: The username to reset password for. Will be validated.
+            password: Optional password. If not provided, a secure password
+                will be generated.
+
+        Returns:
+            PasswordResetResult containing the new password and per-service results.
+
+        Raises:
+            ValidationError: If username validation fails.
+
+        Example:
+            >>> result = await service.reset_password("johndoe")
+            >>> if result.any_success:
+            ...     print(f"Your new password is: {result.password}")
+        """
+        # Validate username
+        username = validate_username(username)
+
+        # Generate password if not provided
+        if password is None:
+            password = generate_password(length=16)
+
+        logger.info(f"Starting password reset for user: {username}")
+
+        # Create result object
+        result = PasswordResetResult(
+            username=username,
+            password=password,
+        )
+
+        # Attempt password reset on each enabled service
+        if self.jellyfin_service:
+            sr = await self._reset_jellyfin_password(username, password)
+            result.services.append(sr)
+
+        if self.nextcloud_service:
+            sr = await self._reset_nextcloud_password(username, password)
+            result.services.append(sr)
+
+        if self.navidrome_service:
+            sr = await self._reset_navidrome_password(username, password)
+            result.services.append(sr)
+
+        if self.romm_service:
+            sr = await self._reset_romm_password(username, password)
+            result.services.append(sr)
+
+        # Log summary
+        success_count = len(result.successful)
+        failed_count = len(result.failed)
+        logger.info(
+            f"Password reset complete for {username}: "
+            f"{success_count} succeeded, {failed_count} failed"
+        )
+
+        return result
+
+    async def _reset_jellyfin_password(
+        self, username: str, password: str
+    ) -> ServiceResult:
+        """Attempt to reset password on Jellyfin."""
+        try:
+            # Check if user exists
+            if not await self.jellyfin_service.user_exists(username):
+                logger.info(f"Jellyfin: User {username} does not exist, skipping")
+                return ServiceResult(
+                    service_name="Jellyfin",
+                    success=False,
+                    message="User not found",
+                    error="User does not have an account on this service",
+                )
+
+            # Reset the password
+            await self.jellyfin_service.set_password(username, password)
+            logger.info(f"Jellyfin: Reset password for {username}")
+            return ServiceResult(
+                service_name="Jellyfin",
+                success=True,
+                message="Password reset successfully",
+            )
+
+        except Exception as e:
+            logger.error(f"Jellyfin: Failed to reset password for {username}: {e}")
+            return ServiceResult(
+                service_name="Jellyfin",
+                success=False,
+                message="Password reset failed",
+                error=str(e),
+            )
+
+    async def _reset_nextcloud_password(
+        self, username: str, password: str
+    ) -> ServiceResult:
+        """Attempt to reset password on NextCloud."""
+        try:
+            # Check if user exists
+            if not await self.nextcloud_service.user_exists(username):
+                logger.info(f"NextCloud: User {username} does not exist, skipping")
+                return ServiceResult(
+                    service_name="NextCloud",
+                    success=False,
+                    message="User not found",
+                    error="User does not have an account on this service",
+                )
+
+            # Reset the password
+            await self.nextcloud_service.set_password(username, password)
+            logger.info(f"NextCloud: Reset password for {username}")
+            return ServiceResult(
+                service_name="NextCloud",
+                success=True,
+                message="Password reset successfully",
+            )
+
+        except Exception as e:
+            logger.error(f"NextCloud: Failed to reset password for {username}: {e}")
+            return ServiceResult(
+                service_name="NextCloud",
+                success=False,
+                message="Password reset failed",
+                error=str(e),
+            )
+
+    async def _reset_navidrome_password(
+        self, username: str, password: str
+    ) -> ServiceResult:
+        """Attempt to reset password on Navidrome."""
+        try:
+            # Check if user exists
+            if not await self.navidrome_service.user_exists(username):
+                logger.info(f"Navidrome: User {username} does not exist, skipping")
+                return ServiceResult(
+                    service_name="Navidrome",
+                    success=False,
+                    message="User not found",
+                    error="User does not have an account on this service",
+                )
+
+            # Reset the password
+            await self.navidrome_service.set_password(username, password)
+            logger.info(f"Navidrome: Reset password for {username}")
+            return ServiceResult(
+                service_name="Navidrome",
+                success=True,
+                message="Password reset successfully",
+            )
+
+        except Exception as e:
+            logger.error(f"Navidrome: Failed to reset password for {username}: {e}")
+            return ServiceResult(
+                service_name="Navidrome",
+                success=False,
+                message="Password reset failed",
+                error=str(e),
+            )
+
+    async def _reset_romm_password(
+        self, username: str, password: str
+    ) -> ServiceResult:
+        """Attempt to reset password on Romm."""
+        try:
+            # Check if user exists
+            if not await self.romm_service.user_exists(username):
+                logger.info(f"Romm: User {username} does not exist, skipping")
+                return ServiceResult(
+                    service_name="Romm",
+                    success=False,
+                    message="User not found",
+                    error="User does not have an account on this service",
+                )
+
+            # Reset the password
+            await self.romm_service.set_password(username, password)
+            logger.info(f"Romm: Reset password for {username}")
+            return ServiceResult(
+                service_name="Romm",
+                success=True,
+                message="Password reset successfully",
+            )
+
+        except Exception as e:
+            logger.error(f"Romm: Failed to reset password for {username}: {e}")
+            return ServiceResult(
+                service_name="Romm",
+                success=False,
+                message="Password reset failed",
                 error=str(e),
             )

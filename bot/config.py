@@ -350,9 +350,12 @@ class RegistrationConfig:
         enabled: Whether the registration feature is enabled.
             Requires at least one service (Jellyfin, NextCloud, Navidrome, Romm)
             to also be enabled.
+        registry_file: Path to the JSON file storing Discord user to service
+            account mappings. Defaults to "data/user_registry.json".
     """
 
     enabled: bool = False
+    registry_file: str = "data/user_registry.json"
 
 
 @dataclass
@@ -1119,6 +1122,7 @@ def _build_registration_config(json_config: dict[str, Any]) -> RegistrationConfi
 
     Environment Variables:
         - REGISTRATION_ENABLED: Whether registration feature is enabled
+        - REGISTRATION_REGISTRY_FILE: Path to user registry JSON file
     """
     registration_json = json_config.get("registration", {})
 
@@ -1130,7 +1134,13 @@ def _build_registration_config(json_config: dict[str, Any]) -> RegistrationConfi
         else registration_json.get("enabled", False)
     )
 
-    return RegistrationConfig(enabled=enabled)
+    # Registry file path
+    registry_file = (
+        os.getenv("REGISTRATION_REGISTRY_FILE")
+        or registration_json.get("registry_file", "data/user_registry.json")
+    )
+
+    return RegistrationConfig(enabled=enabled, registry_file=registry_file)
 
 
 # =============================================================================
