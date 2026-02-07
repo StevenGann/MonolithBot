@@ -305,7 +305,7 @@ class TestOnMessageParsing:
         await cog.on_message(mock_dm_message)
 
         cog.registration_service.register_user.assert_called_once_with(
-            "myuser", "myemail@test.com"
+            "myuser", "myemail@test.com", None
         )
 
     @pytest.mark.asyncio
@@ -634,11 +634,11 @@ class TestCreateHelpEmbed:
 
     @pytest.mark.asyncio
     async def test_help_embed_has_example_field(self, cog: RegistrationCog) -> None:
-        """Test that help embed has example field."""
+        """Test that help embed has examples field."""
         await cog.cog_load()
         embed = cog._create_help_embed()
 
-        example_field = next((f for f in embed.fields if f.name == "Example"), None)
+        example_field = next((f for f in embed.fields if f.name == "Examples"), None)
         assert example_field is not None
 
     @pytest.mark.asyncio

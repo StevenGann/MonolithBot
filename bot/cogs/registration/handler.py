@@ -178,7 +178,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
         # Extract arguments after "register"
         args = content[8:].strip()  # Remove "register" prefix
 
-        # Parse username and email
+        # Parse username, email, and optional password
         parts = args.split()
 
         if len(parts) < 2:
@@ -187,9 +187,10 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         username = parts[0]
         email = parts[1]
+        password = parts[2] if len(parts) >= 3 else None
 
         # Process the registration
-        await self._process_registration(message.channel, message.author, username, email)
+        await self._process_registration(message.channel, message.author, username, email, password)
 
     # -------------------------------------------------------------------------
     # Slash Commands
@@ -202,12 +203,14 @@ class RegistrationCog(commands.Cog, name="Registration"):
     @app_commands.describe(
         username="Your desired username (3-32 characters, letters/numbers/underscores)",
         email="Your email address",
+        password="Optional: Your desired password (leave empty to generate a secure one)",
     )
     async def register_command(
         self,
         interaction: discord.Interaction,
         username: str,
         email: str,
+        password: Optional[str] = None,
     ) -> None:
         """
         Slash command for user registration.
@@ -219,6 +222,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
             interaction: The Discord interaction.
             username: Desired username.
             email: User's email address.
+            password: Optional desired password. If not provided, a secure one is generated.
         """
         # Check if registration is enabled
         if not self.bot.config.registration.enabled:
@@ -236,15 +240,57 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         if not is_dm:
             # In guild, redirect to DM
+            password_hint = f" {password}" if password else ""
             await interaction.followup.send(
                 "🔒 For security, please use this command in a DM with me.\n"
-                f"Send me a DM with: `register {username} {email}`",
+                f"Send me a DM with: `register {username} {email}{password_hint}`",
                 ephemeral=True,
             )
             return
 
         # Process registration
-        await self._process_registration_interaction(interaction, username, email)
+        await self._process_registration_interaction(interaction, username, email, password)
+
+    @app_commands.command(
+        name="help",
+        description="Get help with available commands (sends a DM)",
+    )
+    async def help_command(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
+        """
+        Slash command for getting help.
+
+        Sends a DM to the user with all available commands and their descriptions.
+
+        Args:
+            interaction: The Discord interaction.
+        """
+        await interaction.response.defer(ephemeral=True)
+
+        # Try to send DM to user
+        try:
+            dm_channel = await interaction.user.create_dm()
+            embed = self._create_full_help_embed()
+            await dm_channel.send(embed=embed)
+
+            await interaction.followup.send(
+                "📬 I've sent you a DM with the help information!",
+                ephemeral=True,
+            )
+        except discord.Forbidden:
+            # User has DMs disabled
+            await interaction.followup.send(
+                "❌ I couldn't send you a DM. Please enable DMs from server members and try again.",
+                ephemeral=True,
+            )
+        except Exception as e:
+            logger.error(f"Error sending help DM: {e}")
+            await interaction.followup.send(
+                "❌ An error occurred while sending the help message.",
+                ephemeral=True,
+            )
 
     @app_commands.command(
         name="resetpassword",
@@ -303,6 +349,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
         user: discord.User,
         username: str,
         email: str,
+        password: Optional[str] = None,
     ) -> None:
         """
         Process a registration request from a DM message.
@@ -312,6 +359,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
             user: The Discord user requesting registration.
             username: Desired username.
             email: User's email address.
+            password: Optional desired password. If not provided, one is generated.
         """
         logger.info(
             f"Registration request from {user.name} ({user.id}): "
@@ -341,7 +389,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
         async with channel.typing():
             # Perform registration
             try:
-                result = await self.registration_service.register_user(username, email)
+                result = await self.registration_service.register_user(username, email, password)
             except Exception as e:
                 logger.error(f"Registration failed for {username}: {e}")
                 await self._send_error(channel, "An unexpected error occurred during registration.")
@@ -374,6 +422,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
         interaction: discord.Interaction,
         username: str,
         email: str,
+        password: Optional[str] = None,
     ) -> None:
         """
         Process a registration request from a slash command.
@@ -382,6 +431,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
             interaction: The Discord interaction.
             username: Desired username.
             email: User's email address.
+            password: Optional desired password. If not provided, one is generated.
         """
         user = interaction.user
         logger.info(
@@ -419,7 +469,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         # Perform registration
         try:
-            result = await self.registration_service.register_user(username, email)
+            result = await self.registration_service.register_user(username, email, password)
         except Exception as e:
             logger.error(f"Registration failed for {username}: {e}")
             await interaction.followup.send(
@@ -670,6 +720,85 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         return embed
 
+    def _create_full_help_embed(self) -> discord.Embed:
+        """
+        Create a comprehensive help embed listing all available commands.
+
+        Returns:
+            Discord embed with all commands and their descriptions.
+        """
+        embed = discord.Embed(
+            title="📚 MonolithBot Help",
+            description=(
+                "Welcome! Here are all the commands you can use.\n"
+                "All commands work via DM or with `/` slash commands."
+            ),
+            color=COLOR_INFO,
+        )
+
+        # Registration commands
+        embed.add_field(
+            name="📝 Registration",
+            value=(
+                "**`/register <username> <email> [password]`**\n"
+                "Register for accounts on all Monolith services.\n"
+                "• `username` - Your desired username (3-32 chars)\n"
+                "• `email` - Your email address\n"
+                "• `password` - Optional, auto-generated if not provided\n"
+                "\n"
+                "*Or DM:* `register <username> <email> [password]`"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="🔑 Password Reset",
+            value=(
+                "**`/resetpassword [password]`**\n"
+                "Reset your password on all services.\n"
+                "• `password` - Optional new password\n"
+                "• Must be used in DMs for security\n"
+                "• Only works if you're already registered"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="❓ Help",
+            value=(
+                "**`/help`**\n"
+                "Shows this help message (sent via DM)."
+            ),
+            inline=False,
+        )
+
+        # Show available services
+        if self.registration_service:
+            services = self.registration_service.enabled_services
+            if services:
+                embed.add_field(
+                    name="🌐 Available Services",
+                    value="\n".join(f"• {s}" for s in services),
+                    inline=True,
+                )
+
+        # Tips
+        embed.add_field(
+            name="💡 Tips",
+            value=(
+                "• Passwords are only shown once - save them!\n"
+                "• Use spoiler tags to reveal passwords: ||click||\n"
+                "• Registration commands work best in DMs"
+            ),
+            inline=True,
+        )
+
+        embed.set_footer(
+            text="Need more help? Contact an administrator."
+        )
+
+        return embed
+
     def _create_not_registered_embed(self) -> discord.Embed:
         """
         Create an embed for when a Discord user is not registered.
@@ -702,8 +831,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
             title="ℹ️ Already Registered",
             description=(
                 f"You have already registered with the username `{existing_username}`.\n\n"
-                "If you need to reset your password or update your account, "
-                "please contact an administrator."
+                "If you need to reset your password, use `/resetpassword` in a DM with me."
             ),
             color=COLOR_INFO,
         )
@@ -748,13 +876,16 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         embed.add_field(
             name="Usage",
-            value="`register <username> <email>`",
+            value="`register <username> <email> [password]`",
             inline=False,
         )
 
         embed.add_field(
-            name="Example",
-            value="`register johndoe john@example.com`",
+            name="Examples",
+            value=(
+                "`register johndoe john@example.com`\n"
+                "`register johndoe john@example.com MySecurePass123`"
+            ),
             inline=False,
         )
 
@@ -768,6 +899,15 @@ class RegistrationCog(commands.Cog, name="Registration"):
             inline=True,
         )
 
+        embed.add_field(
+            name="Password",
+            value=(
+                "• Optional - a secure one is generated if not provided\n"
+                "• Shown only once after registration"
+            ),
+            inline=True,
+        )
+
         # Show available services
         if self.registration_service:
             services = self.registration_service.enabled_services
@@ -775,7 +915,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
                 embed.add_field(
                     name="Available Services",
                     value="\n".join(f"• {s}" for s in services),
-                    inline=True,
+                    inline=False,
                 )
 
         return embed
