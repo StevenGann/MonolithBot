@@ -373,16 +373,26 @@ class RegistrationCog(commands.Cog, name="Registration"):
             await self._send_validation_error(channel, str(e))
             return
 
-        # Check if Discord user already registered
-        if self.user_registry and self.user_registry.is_discord_user_registered(user.id):
+        # If Discord user already registered, continue registration on any services
+        # where they don't yet exist (e.g., retry after fixing a failed service)
+        already_registered = (
+            self.user_registry is not None
+            and self.user_registry.is_discord_user_registered(user.id)
+        )
+        if already_registered:
             existing = self.user_registry.get_by_discord_id(user.id)
-            await self._send_already_registered_error(channel, existing.username)
-            return
-
-        # Check if username is already taken
-        if self.user_registry and self.user_registry.is_username_taken(username):
-            await self._send_username_taken_error(channel, username)
-            return
+            # Use existing credentials to attempt registration on missing services
+            username = existing.username
+            email = existing.email
+            logger.info(
+                f"Continuing registration for existing user {user.name} ({user.id}): "
+                f"username={username}"
+            )
+        else:
+            # Check if username is already taken by another user
+            if self.user_registry and self.user_registry.is_username_taken(username):
+                await self._send_username_taken_error(channel, username)
+                return
 
         # Show typing indicator while processing
         async with channel.typing():
@@ -399,15 +409,19 @@ class RegistrationCog(commands.Cog, name="Registration"):
             # Include services where user already existed (they're still "registered")
             all_registered = [sr.service_name for sr in result.services if sr.success]
 
-            self.user_registry.add_user(
-                discord_id=user.id,
-                discord_name=str(user),
-                username=username,
-                email=email,
-                services=all_registered,
-            )
+            if already_registered:
+                self.user_registry.update_services(user.id, all_registered)
+                logger.info(f"Updated registration for {username}: {all_registered}")
+            else:
+                self.user_registry.add_user(
+                    discord_id=user.id,
+                    discord_name=str(user),
+                    username=username,
+                    email=email,
+                    services=all_registered,
+                )
+                logger.info(f"Saved registration to registry: {user} -> {username}")
             await self.user_registry.save()
-            logger.info(f"Saved registration to registry: {user} -> {username}")
 
         # Send result embed
         await self._send_result_embed(channel, result)
@@ -445,22 +459,28 @@ class RegistrationCog(commands.Cog, name="Registration"):
             )
             return
 
-        # Check if Discord user already registered
-        if self.user_registry and self.user_registry.is_discord_user_registered(user.id):
+        # If Discord user already registered, continue registration on any services
+        # where they don't yet exist
+        already_registered = (
+            self.user_registry is not None
+            and self.user_registry.is_discord_user_registered(user.id)
+        )
+        if already_registered:
             existing = self.user_registry.get_by_discord_id(user.id)
-            await interaction.followup.send(
-                embed=self._create_already_registered_embed(existing.username),
-                ephemeral=True,
+            username = existing.username
+            email = existing.email
+            logger.info(
+                f"Continuing registration for existing user {user.name} ({user.id}): "
+                f"username={username}"
             )
-            return
-
-        # Check if username is already taken
-        if self.user_registry and self.user_registry.is_username_taken(username):
-            await interaction.followup.send(
-                embed=self._create_username_taken_embed(username),
-                ephemeral=True,
-            )
-            return
+        else:
+            # Check if username is already taken by another user
+            if self.user_registry and self.user_registry.is_username_taken(username):
+                await interaction.followup.send(
+                    embed=self._create_username_taken_embed(username),
+                    ephemeral=True,
+                )
+                return
 
         # Perform registration
         try:
@@ -477,15 +497,19 @@ class RegistrationCog(commands.Cog, name="Registration"):
         if result.any_success and self.user_registry:
             all_registered = [sr.service_name for sr in result.services if sr.success]
 
-            self.user_registry.add_user(
-                discord_id=user.id,
-                discord_name=str(user),
-                username=username,
-                email=email,
-                services=all_registered,
-            )
+            if already_registered:
+                self.user_registry.update_services(user.id, all_registered)
+                logger.info(f"Updated registration for {username}: {all_registered}")
+            else:
+                self.user_registry.add_user(
+                    discord_id=user.id,
+                    discord_name=str(user),
+                    username=username,
+                    email=email,
+                    services=all_registered,
+                )
+                logger.info(f"Saved registration to registry: {user} -> {username}")
             await self.user_registry.save()
-            logger.info(f"Saved registration to registry: {user} -> {username}")
 
         # Send result embed
         embed = self._create_result_embed(result)
