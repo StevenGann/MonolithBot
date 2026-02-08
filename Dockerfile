@@ -1,3 +1,8 @@
+# MonolithBot Docker image
+# Build: docker build -t monolithbot .
+# Run: Mount config.json to /app/config.json or use environment variables
+# See README.md for deployment instructions
+
 FROM python:3.11-slim
 
 WORKDIR /app

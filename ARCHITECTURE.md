@@ -1,6 +1,6 @@
 # MonolithBot Architecture & Development Guide
 
-This document provides a comprehensive overview of the MonolithBot codebase for developers (human or AI) who need to understand, maintain, or extend the project.
+This document provides a comprehensive overview of the MonolithBot codebase for developers (human or AI) who need to understand, maintain, or extend the project. It is the primary reference for onboarding new contributors.
 
 ## Table of Contents
 
@@ -9,6 +9,7 @@ This document provides a comprehensive overview of the MonolithBot codebase for 
 - [Core Components](#core-components)
 - [Data Flow](#data-flow)
 - [Configuration System](#configuration-system)
+- [Registration System](#registration-system)
 - [Extending the Bot](#extending-the-bot)
 - [Key Design Decisions](#key-design-decisions)
 
@@ -16,61 +17,86 @@ This document provides a comprehensive overview of the MonolithBot codebase for 
 
 ## Project Overview
 
-MonolithBot is a Discord bot designed to monitor a Jellyfin media server. It provides two primary functions:
+MonolithBot is a Discord bot with three main feature areas:
 
-1. **Content Announcements**: At scheduled times, announce newly added media (movies, TV shows, music) to a Discord channel with rich embeds
-2. **Health Monitoring**: Continuously monitor the Jellyfin server and alert users when it goes offline or comes back online
+1. **Jellyfin Media Server**: Content announcements, random suggestions, and health monitoring
+2. **Minecraft Game Servers**: Multi-server health monitoring and player join announcements
+3. **Multi-Service User Registration**: One-click registration across Jellyfin, NextCloud, Navidrome, and Romm
 
 ### Technology Stack
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| Discord API | `discord.py` (v2.3+) | Bot framework, slash commands, embeds |
-| HTTP Client | `aiohttp` | Async requests to Jellyfin API |
+| Discord API | `discord.py` (v2.3+) | Bot framework, slash commands, embeds, DMs |
+| HTTP Client | `aiohttp` | Async requests to external APIs |
 | Scheduling | `APScheduler` | Cron-based announcements, interval-based health checks |
+| Minecraft Query | `mcstatus` | Server List Ping protocol for Minecraft servers |
 | Timezone | `pytz` | Timezone-aware scheduling |
 | Config | JSON + env vars | Flexible configuration for dev/prod |
 
----
-
-## Directory Structure
+### Directory Structure
 
 ```
 MonolithBot/
-├── bot/                          # Main application package
-│   ├── __init__.py               # Package marker, version info
-│   ├── main.py                   # Entry point, CLI, bot initialization
-│   ├── config.py                 # Configuration loading and validation
-│   ├── cogs/                     # Discord.py cogs (feature modules)
+├── bot/                              # Main application package
+│   ├── __init__.py                   # Package marker, version info
+│   ├── main.py                       # Entry point, CLI, bot initialization
+│   ├── config.py                     # Configuration loading and validation
+│   ├── cogs/                         # Discord.py cogs (feature modules)
 │   │   ├── __init__.py
-│   │   ├── announcements.py      # Scheduled content announcements
-│   │   └── health.py             # Server health monitoring
-│   └── services/                 # External service integrations
+│   │   ├── jellyfin/                 # Jellyfin-specific cogs
+│   │   │   ├── __init__.py
+│   │   │   ├── announcements.py      # Scheduled content announcements
+│   │   │   ├── health.py             # Jellyfin server health monitoring
+│   │   │   └── suggestions.py        # Random content suggestions
+│   │   ├── minecraft/                # Minecraft-specific cogs
+│   │   │   ├── __init__.py
+│   │   │   ├── health.py             # Minecraft server health monitoring
+│   │   │   └── players.py            # Player join announcements
+│   │   └── registration/             # User registration cogs
+│   │       ├── __init__.py
+│   │       └── handler.py            # DM handler for registration requests
+│   └── services/                     # External service integrations
 │       ├── __init__.py
-│       ├── jellyfin.py           # Jellyfin API client
-│       └── scheduler.py          # APScheduler factory and utilities
-├── tests/                        # Test suite
-│   ├── __init__.py
-│   ├── conftest.py               # Shared pytest fixtures
-│   ├── test_config.py            # Configuration tests
-│   ├── test_jellyfin.py          # Jellyfin API client tests
-│   ├── test_scheduler.py         # Scheduler utility tests
-│   ├── test_announcements.py     # Announcements cog tests
-│   └── test_health.py            # Health monitoring tests
-├── .github/
-│   └── workflows/
-│       ├── docker-publish.yml    # CI/CD for Docker image
-│       └── ci.yml                # Test and lint workflow
-├── config.json.example           # Example JSON configuration
-├── .env.example                  # Example environment variables
-├── docker-compose.yml            # Production deployment (pulls from GHCR)
-├── docker-compose.local.yml      # Local development (builds from source)
-├── Dockerfile                    # Container image definition
-├── requirements.txt              # Python dependencies
-├── requirements-dev.txt          # Development dependencies (testing, linting)
-├── pyproject.toml                # Project config and pytest settings
-├── README.md                     # User documentation
-└── ARCHITECTURE.md               # This file
+│       ├── jellyfin.py               # Jellyfin API client + service
+│       ├── minecraft.py              # Minecraft Server List Ping client + service
+│       ├── navidrome.py              # Navidrome API client + service
+│       ├── nextcloud.py              # NextCloud OCS API client + service
+│       ├── romm.py                   # Romm API client + service
+│       ├── registration.py           # Multi-service registration orchestrator
+│       ├── password_utils.py         # Secure password generation
+│       ├── user_registry.py          # Discord→service account mapping storage
+│       └── scheduler.py              # APScheduler factory and utilities
+├── tests/                            # Test suite
+│   ├── conftest.py                   # Shared pytest fixtures
+│   ├── test_config.py                # Configuration tests
+│   ├── test_jellyfin.py              # Jellyfin API client tests
+│   ├── test_minecraft_service.py     # Minecraft service tests
+│   ├── test_minecraft_cogs.py        # Minecraft cog tests
+│   ├── test_announcements.py         # Announcements cog tests
+│   ├── test_health.py                # Jellyfin health monitoring tests
+│   ├── test_suggestions.py           # Suggestions cog tests
+│   ├── test_main.py                  # CLI and entry point tests
+│   ├── test_scheduler.py             # Scheduler utility tests
+│   ├── test_registration.py          # Registration orchestrator tests
+│   ├── test_registration_handler.py  # Registration cog tests
+│   ├── test_navidrome.py             # Navidrome service tests
+│   ├── test_nextcloud.py             # NextCloud service tests
+│   ├── test_romm.py                  # Romm service tests
+│   ├── test_password_utils.py        # Password generation tests
+│   └── test_user_registry.py         # User registry tests
+├── .github/workflows/
+│   ├── ci.yml                        # Tests, lint, coverage
+│   └── docker-publish.yml            # Docker image build and publish
+├── config.json.example               # Example JSON configuration
+├── .env.example                      # Example environment variables
+├── docker-compose.yml                # Production deployment
+├── docker-compose.local.yml          # Local development build
+├── Dockerfile                        # Container image definition
+├── pyproject.toml                    # Project config, pytest, coverage
+├── README.md                         # User documentation
+├── ARCHITECTURE.md                   # This file (developer guide)
+└── CONTRIBUTING.md                   # Contribution guidelines
 ```
 
 ---
@@ -81,167 +107,69 @@ MonolithBot/
 
 The main module handles:
 
-- **CLI argument parsing**: `--config` for custom config path, `--verbose` for debug logging, granular `--test*` flags
-- **Bot initialization**: Creates `MonolithBot` instance with proper Discord intents
-- **Cog loading**: Automatically loads all cogs from `bot/cogs/`
-- **Graceful shutdown**: Handles SIGINT/SIGTERM signals
-- **Test modes**: Granular control over which test actions to trigger on startup
-
-```python
-# Test modes dataclass for granular control
-@dataclass
-class TestModes:
-    health: bool = False       # Run health check test
-    announcement: bool = False # Run announcement test
-
-    @property
-    def any_enabled(self) -> bool:
-        return self.health or self.announcement
-
-    @classmethod
-    def all_enabled(cls) -> "TestModes":
-        return cls(health=True, announcement=True)
-
-# Key class
-class MonolithBot(commands.Bot):
-    def __init__(self, config: Config, test_modes: TestModes | None = None):
-        self.config = config        # Config available to all cogs via self.bot.config
-        self._test_modes = test_modes or TestModes()
-
-    @property
-    def test_mode(self) -> bool:
-        """Backward compatible check if any test mode is enabled."""
-        return self._test_modes.any_enabled
-```
+- **CLI argument parsing**: `--config` for custom config path, `--verbose` for debug logging, granular `--test*` flags for each feature
+- **Bot initialization**: Creates `MonolithBot` with Discord intents (including `message_content` when registration is enabled)
+- **Service initialization**: Creates shared JellyfinService, MinecraftService; registration services are created by the registration cog
+- **Cog loading**: Loads cogs conditionally based on config (e.g., Jellyfin cogs only when `jellyfin.enabled=true`)
+- **Graceful shutdown**: Handles SIGINT/SIGTERM, closes HTTP sessions
+- **Test modes**: Triggers specific features immediately on startup for debugging
 
 **CLI flags**:
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--test` | `-t` | Run all test modes |
-| `--test-health` | | Run health check and send status message |
-| `--test-announcement` | | Trigger content announcement immediately |
+| `--test-jellyfin` | | Run all Jellyfin test modes |
+| `--test-jf-health` | | Jellyfin health check |
+| `--test-jf-announcement` | | Jellyfin content announcement |
+| `--test-jf-suggestion` | | Jellyfin random suggestions |
+| `--test-minecraft` | | Run all Minecraft test modes |
+| `--test-mc-health` | | Minecraft health check |
+| `--test-mc-announce` | | Minecraft player announcement |
 | `--config` | `-c` | Custom config file path |
-| `--verbose` | `-v` | Enable debug logging |
-
-**Run examples**:
-```bash
-python -m bot.main                          # Normal operation
-python -m bot.main --test                   # All test modes
-python -m bot.main --test-health            # Health test only
-python -m bot.main --test-announcement -v   # Announcement test with verbose logging
-```
+| `--verbose` | `-v` | Debug logging |
 
 ### 2. Configuration (`bot/config.py`)
 
-The configuration system uses dataclasses for type safety:
+Uses dataclasses for type safety. `Config` aggregates: `DiscordConfig`, `JellyfinConfig`, `MinecraftConfig`, plus optional `NextCloudConfig`, `NavidromeConfig`, `RommConfig`, and `RegistrationConfig`.
 
-```python
-@dataclass
-class Config:
-    discord: DiscordConfig      # token, channel IDs
-    jellyfin: JellyfinConfig    # url, api_key
-    schedule: ScheduleConfig    # times, timezone, intervals
-    content_types: list[str]    # ["Movie", "Series", "Audio"]
-```
+**Loading priority**: Environment variables override JSON file values. Required fields are validated; `ConfigurationError` is raised with clear messages when invalid.
 
-**Loading priority**: Environment variables override JSON file values. This allows the same codebase to work for local development (JSON) and Docker deployment (env vars).
+### 3. Service Layer (`bot/services/`)
 
-```python
-config = load_config(Path("config.json"))
-# 1. Load from JSON file (if exists)
-# 2. Override with environment variables (if set)
-# 3. Validate required fields
-```
+Each external service follows a consistent pattern:
 
-### 3. Jellyfin Client (`bot/services/jellyfin.py`)
+- **Client**: Low-level HTTP/API client for a single URL (e.g., `JellyfinClient`, `NavidromeClient`)
+- **Service**: High-level wrapper with multi-URL failover, cached active URL, and delegated API methods
 
-Async HTTP client for Jellyfin API:
+| Service | Purpose |
+|---------|---------|
+| `jellyfin.py` | Media server: health, recent items, random items, user creation |
+| `minecraft.py` | Server List Ping: status, player list, failover per server |
+| `navidrome.py` | Music server: user creation, existence check |
+| `nextcloud.py` | File sync: user creation via OCS API |
+| `romm.py` | ROM manager: user creation |
+| `registration.py` | Orchestrates multi-service registration, password generation, result aggregation |
+| `password_utils.py` | Cryptographically secure password generation |
+| `user_registry.py` | JSON persistence for Discord ID → username/email mappings |
 
-```python
-class JellyfinClient:
-    async def check_health() -> ServerInfo          # GET /System/Info
-    async def get_recent_items(type, hours) -> list[JellyfinItem]  # GET /Items
-    def get_item_image_url(item_id) -> str          # Build image URL
-    def get_item_url(item_id) -> str                # Build web player URL
-```
+### 4. Jellyfin Cogs (`bot/cogs/jellyfin/`)
 
-**Key data classes**:
-- `JellyfinItem`: Represents a media item (movie, episode, song) with `date_created` timestamp
-- `ServerInfo`: Server name, version, OS
+- **announcements.py**: Scheduled content announcements, `/jf-status`, `/jf-announce`
+- **health.py**: Interval-based health checks, state transition notifications
+- **suggestions.py**: Scheduled random suggestions, `/jf-suggest`
 
-**Error hierarchy**:
-- `JellyfinError`: Base exception
-- `JellyfinConnectionError`: Server unreachable
-- `JellyfinAuthError`: Invalid API key
+### 5. Minecraft Cogs (`bot/cogs/minecraft/`)
 
-**Client-side date filtering**: The `get_recent_items()` method performs client-side filtering on the `date_created` field to ensure only items within the configured `lookback_hours` window are returned. This provides robust filtering regardless of Jellyfin API behavior:
+- **health.py**: Per-server health checks, state transitions, `/mc-status`
+- **players.py**: Player join detection via polling, join announcements
 
-```python
-# Items are filtered after fetching to ensure correct time window
-if parsed_item.date_created is not None and parsed_item.date_created >= cutoff:
-    parsed_items.append(parsed_item)
-```
+### 6. Registration Cog (`bot/cogs/registration/`)
 
-### 4. Announcements Cog (`bot/cogs/announcements.py`)
+- **handler.py**: Listens for DMs containing `register <username> <email>`, validates input, calls `RegistrationService`, sends embed with results and password. Also provides `/register` slash command.
 
-Handles scheduled content announcements:
+### 7. Scheduler (`bot/services/scheduler.py`)
 
-```
-┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
-│   APScheduler   │────▶│ _run_        │────▶│ Jellyfin    │
-│   (CronTrigger) │     │ announcement │     │ API         │
-└─────────────────┘     └──────────────┘     └─────────────┘
-                               │
-                               ▼
-                        ┌──────────────┐
-                        │ Discord      │
-                        │ Embeds       │
-                        └──────────────┘
-```
-
-**Scheduled jobs**: Created from `config.schedule.announcement_times` (e.g., `["17:00", "21:00"]`)
-
-**Slash commands**:
-- `/status` - Show bot and Jellyfin status (everyone)
-- `/announce` - Manually trigger announcement (admin only)
-
-### 5. Health Cog (`bot/cogs/health.py`)
-
-Monitors Jellyfin server availability:
-
-```
-┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
-│   APScheduler   │────▶│ _run_        │────▶│ Jellyfin    │
-│ (IntervalTrigger│     │ health_check │     │ check_health│
-│  every N mins)  │     └──────────────┘     └─────────────┘
-└─────────────────┘            │
-                               ▼
-                        ┌──────────────┐
-                        │ State        │
-                        │ Transition?  │
-                        └──────────────┘
-                          │         │
-                    ┌─────┘         └─────┐
-                    ▼                     ▼
-             ┌────────────┐        ┌────────────┐
-             │ Online     │        │ Offline    │
-             │ Notification│       │ Notification│
-             └────────────┘        └────────────┘
-```
-
-**State tracking**: Only sends notifications on state *transitions* (online→offline, offline→online), not on every check.
-
-### 6. Scheduler (`bot/services/scheduler.py`)
-
-Factory function for creating configured `AsyncIOScheduler`:
-
-```python
-def create_scheduler(config: Config) -> AsyncIOScheduler:
-    # Configured with timezone from config
-    # Job defaults: coalesce=True, max_instances=1
-```
-
-Utility function `parse_time("17:00")` returns `(17, 0)` tuple for cron triggers.
+Factory `create_scheduler(config)` returns an `AsyncIOScheduler` with timezone and job defaults (coalesce=True, max_instances=1). Utility `parse_time("17:00")` returns `(17, 0)` for CronTrigger.
 
 ---
 
@@ -252,20 +180,16 @@ Utility function `parse_time("17:00")` returns `(17, 0)` tuple for cron triggers
 ```
 1. main.py: Parse CLI args
 2. main.py: load_config() → Config object
-3. main.py: Create MonolithBot(config)
+3. main.py: Create MonolithBot(config, test_modes)
 4. MonolithBot.setup_hook():
-   ├── Load announcements cog
-   │   ├── Create JellyfinClient
-   │   ├── Create scheduler
-   │   ├── Schedule announcement jobs
-   │   └── Start scheduler
-   └── Load health cog
-       ├── Create JellyfinClient
-       ├── Create scheduler
-       ├── Initial health check
-       ├── Schedule health check job
-       └── Start scheduler
-5. MonolithBot.on_ready(): Log connection info
+   ├── Create JellyfinService (if jellyfin.enabled)
+   ├── Create MinecraftService (if minecraft.enabled)
+   ├── Load cogs (conditional):
+   │   ├── bot.cogs.jellyfin.announcements, health, suggestions (if jellyfin)
+   │   ├── bot.cogs.minecraft.health, players (if minecraft)
+   │   └── bot.cogs.registration.handler (if registration.enabled)
+   └── Sync slash commands
+5. MonolithBot.on_ready(): Log connection info, run test modes if enabled
 6. Bot runs until shutdown signal
 ```
 
@@ -274,69 +198,67 @@ Utility function `parse_time("17:00")` returns `(17, 0)` tuple for cron triggers
 ```
 1. Scheduler triggers at configured time (e.g., 17:00 PST)
 2. _run_announcement() called
-3. JellyfinClient.get_all_recent_items() fetches new content
+3. JellyfinService.get_all_recent_items() fetches new content (uses cached active URL)
 4. For each content type with items:
    a. Send section header embed
-   b. For each item (max 10):
+   b. For each item (max per type):
       - Create embed with title, description, thumbnail, link
       - Send to announcement channel
 5. Update _last_announcement timestamp
 ```
 
-### Health Check Flow
+### Health Check Flow (Jellyfin and Minecraft)
 
 ```
 1. Scheduler triggers every N minutes
 2. _run_health_check() called
-3. JellyfinClient.check_health() attempts connection
-4. Compare result to previous state (_server_online)
+3. Service.check_health() tries URLs in order (health checks always start from primary)
+4. Compare result to previous state
 5. If state changed:
-   - online→offline: Send red "Server Offline" embed
-   - offline→online: Send green "Server Online" embed with downtime
+   - online→offline: Send "Server Offline" embed
+   - offline→online: Send "Server Online" embed with downtime
 6. Update state tracking variables
+```
+
+### Registration Flow
+
+```
+1. User DMs bot: "register myusername myemail@example.com" (or uses /register)
+2. RegistrationCog.on_message() or suggest_command() receives request
+3. Validate username and email format
+4. Check UserRegistry: if already registered, optionally offer password reset
+5. RegistrationService.register_user():
+   a. Generate password (password_utils.generate_password)
+   b. For each enabled service (Jellyfin, NextCloud, Navidrome, Romm):
+      - Check if user exists
+      - If not, create user with generated password
+      - Record result (success, skipped, failed)
+   c. Return RegistrationResult with password and per-service status
+6. UserRegistry.add_user() to persist mapping
+7. Send embed with results and password (DM only, spoiler-tagged)
 ```
 
 ---
 
 ## Configuration System
 
-### JSON Configuration (`config.json`)
+See `config.json.example` and `.env.example` for full examples. The README documents all configuration options. Key principle: environment variables override JSON values.
 
-```json
-{
-  "discord": {
-    "token": "BOT_TOKEN",
-    "announcement_channel_id": 123456789,
-    "alert_channel_id": 123456789
-  },
-  "jellyfin": {
-    "url": "http://localhost:8096",
-    "api_key": "API_KEY"
-  },
-  "schedule": {
-    "announcement_times": ["17:00"],
-    "timezone": "America/Los_Angeles",
-    "health_check_interval_minutes": 5,
-    "lookback_hours": 24
-  },
-  "content_types": ["Movie", "Series", "Audio"]
-}
-```
+---
 
-### Environment Variables
+## Registration System
 
-| Variable | Maps To |
-|----------|---------|
-| `DISCORD_TOKEN` | `discord.token` |
-| `DISCORD_ANNOUNCEMENT_CHANNEL_ID` | `discord.announcement_channel_id` |
-| `DISCORD_ALERT_CHANNEL_ID` | `discord.alert_channel_id` |
-| `JELLYFIN_URL` | `jellyfin.url` |
-| `JELLYFIN_API_KEY` | `jellyfin.api_key` |
-| `SCHEDULE_ANNOUNCEMENT_TIMES` | `schedule.announcement_times` (comma-separated) |
-| `SCHEDULE_TIMEZONE` | `schedule.timezone` |
-| `SCHEDULE_HEALTH_CHECK_INTERVAL` | `schedule.health_check_interval_minutes` |
-| `SCHEDULE_LOOKBACK_HOURS` | `schedule.lookback_hours` |
-| `CONTENT_TYPES` | `content_types` (comma-separated) |
+The registration feature allows new Discord users to create accounts on multiple self-hosted services with a single command. It requires:
+
+- **Message Content Intent**: Enabled in Discord Developer Portal for text-based DM registration
+- **Admin credentials**: For each service (NextCloud, Navidrome, Romm); Jellyfin uses its API key
+- **User registry**: Persists Discord ID → username/email in a JSON file (path configurable)
+
+**Adding a new registration service**:
+1. Create a client and service in `bot/services/` (follow `navidrome.py` pattern)
+2. Add config dataclass and loader in `bot/config.py`
+3. Integrate into `bot/services/registration.py` `RegistrationService`
+4. Add user creation and existence-check logic
 
 ---
 
@@ -568,12 +490,23 @@ pytest tests/test_jellyfin.py::TestJellyfinClient::test_check_health_success
 
 ```
 tests/
-├── conftest.py           # Shared fixtures (configs, mocks, sample data)
-├── test_config.py        # Config loading, validation, env var handling
-├── test_jellyfin.py      # API client, HTTP mocking, date parsing
-├── test_scheduler.py     # Scheduler creation, time parsing
-├── test_announcements.py # Embed creation, content type handling
-└── test_health.py        # Health checks, state transitions, notifications
+├── conftest.py                 # Shared fixtures (configs, mocks, sample data)
+├── test_config.py              # Config loading, validation, env var handling
+├── test_jellyfin.py            # Jellyfin API client, HTTP mocking
+├── test_announcements.py       # Announcements cog, embed creation
+├── test_health.py              # Jellyfin health monitoring
+├── test_suggestions.py         # Suggestions cog
+├── test_minecraft_service.py   # Minecraft service, failover
+├── test_minecraft_cogs.py      # Minecraft health and players cogs
+├── test_main.py                # CLI args, TestModes, logging
+├── test_scheduler.py           # Scheduler creation, parse_time
+├── test_registration.py        # Registration orchestrator
+├── test_registration_handler.py # Registration cog
+├── test_navidrome.py           # Navidrome service
+├── test_nextcloud.py           # NextCloud service
+├── test_romm.py                # Romm service
+├── test_password_utils.py      # Password generation
+└── test_user_registry.py       # User registry persistence
 ```
 
 ### Key Fixtures (`conftest.py`)
@@ -586,6 +519,7 @@ tests/
 | `jellyfin_movie` | Sample JellyfinItem (Movie) |
 | `jellyfin_episode` | Sample JellyfinItem (Episode) |
 | `server_info` | Sample ServerInfo response |
+| `minecraft_config` | Minecraft configuration with server list |
 
 ### Writing New Tests
 
@@ -656,12 +590,14 @@ The project has a minimum coverage threshold of 60% configured in `pyproject.tom
 
 | Task | Location | Notes |
 |------|----------|-------|
-| Change announcement embed appearance | `announcements.py` → `_create_item_embed()` | Modify embed fields, colors, etc. |
-| Add new content type | `config.py`, `jellyfin.py` → `_map_content_type()` | Map friendly name to Jellyfin type |
-| Change health check behavior | `health.py` → `_run_health_check()` | Modify check logic or notifications |
-| Add new Jellyfin API call | `jellyfin.py` | Add new async method |
+| Change announcement embed appearance | `jellyfin/announcements.py` → `_create_item_embed()` | Modify embed fields, colors |
+| Add new Jellyfin content type | `config.py`, `jellyfin.py` → `_map_content_type()` | Map friendly name to Jellyfin type |
+| Change Jellyfin health check behavior | `jellyfin/health.py` → `_run_health_check()` | Modify check logic or notifications |
+| Change Minecraft health check behavior | `minecraft/health.py` | Same state-transition pattern |
+| Add new Jellyfin API call | `jellyfin.py` | Add async method to client and service |
+| Add new registration service | `bot/services/`, `config.py`, `registration.py` | Follow Navidrome/NextCloud pattern |
 | Add new slash command | Any cog | Use `@app_commands.command` decorator |
-| Add new configuration option | `config.py` | Add to dataclass and builder function |
-| Add tests for new feature | `tests/` | Create test file or add to existing |
+| Add new configuration option | `config.py` | Add to dataclass and builder, update .env.example |
+| Add tests for new feature | `tests/` | Create test file or add to existing; use conftest fixtures |
 | Run tests | Terminal | `pytest` or `pytest -v --cov=bot` |
-| Debug test mode output | `announcements.py` → `_add_item_fields()` | Shows `date_created` in test mode |
+| Format code | Terminal | `ruff format .` and `ruff check .` |

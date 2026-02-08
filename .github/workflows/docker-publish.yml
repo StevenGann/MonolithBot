@@ -1,3 +1,6 @@
+# MonolithBot Docker: Build and push to ghcr.io on main/master and version tags
+# See README for image usage and deployment
+
 name: Build and Publish Docker Image
 
 on:

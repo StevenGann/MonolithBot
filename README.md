@@ -474,15 +474,29 @@ pytest tests/test_minecraft_service.py
 
 ```
 tests/
-├── conftest.py                 # Shared fixtures
-├── test_config.py              # Configuration tests
-├── test_jellyfin.py            # Jellyfin API client tests
-├── test_minecraft_service.py   # Minecraft service tests
-├── test_minecraft_cogs.py      # Minecraft cog tests
-├── test_scheduler.py           # Scheduler utility tests
-├── test_announcements.py       # Announcements cog tests
-└── test_health.py              # Health monitoring tests
+├── conftest.py                 # Shared fixtures (configs, mocks)
+├── test_config.py              # Configuration loading and validation
+├── test_jellyfin.py            # Jellyfin API client
+├── test_announcements.py       # Jellyfin announcements cog
+├── test_health.py              # Jellyfin health monitoring
+├── test_suggestions.py         # Jellyfin suggestions cog
+├── test_minecraft_service.py   # Minecraft service
+├── test_minecraft_cogs.py      # Minecraft health and players cogs
+├── test_main.py                # CLI, TestModes, logging
+├── test_scheduler.py           # Scheduler utilities
+├── test_registration.py        # Registration orchestrator
+├── test_registration_handler.py # Registration cog
+├── test_navidrome.py           # Navidrome service
+├── test_nextcloud.py           # NextCloud service
+├── test_romm.py                # Romm service
+├── test_password_utils.py      # Password generation
+└── test_user_registry.py       # User registry
 ```
+
+### For Developers
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** – Architecture, data flow, and extension guide for maintainers
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** – Contribution guidelines and development workflow
 
 ### Continuous Integration
 

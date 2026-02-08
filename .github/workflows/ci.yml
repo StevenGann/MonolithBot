@@ -1,3 +1,6 @@
+# MonolithBot CI: Tests (pytest, coverage) and lint (Ruff)
+# Runs on push/PR to main and master
+
 name: CI
 
 on:

@@ -1,7 +1,7 @@
 [project]
 name = "monolithbot"
 version = "1.0.0"
-description = "Discord bot for Jellyfin server monitoring and announcements"
+description = "Discord bot for Jellyfin/Minecraft monitoring and multi-service user registration (NextCloud, Navidrome, Romm)"
 requires-python = ">=3.10"
 
 [tool.pytest.ini_options]
