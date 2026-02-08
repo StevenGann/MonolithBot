@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Jellyfin announcements cog for scheduled content notifications.
 
@@ -62,6 +60,7 @@ See Also:
     - bot.services.scheduler: Scheduler factory and time parsing
     - bot.cogs.jellyfin.health: Companion cog for server health monitoring
 """
+from __future__ import annotations
 
 import logging
 import re

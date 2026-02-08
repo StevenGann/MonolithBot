@@ -8,7 +8,7 @@ Tests cover:
     - Error handling and partial failure scenarios
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

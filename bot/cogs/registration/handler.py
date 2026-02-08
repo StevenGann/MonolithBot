@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Registration DM handler cog for MonolithBot.
 
@@ -32,6 +30,7 @@ See Also:
     - bot.services.user_registry: User mapping persistence
     - bot.config: Registration and service configuration
 """
+from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Optional
@@ -397,10 +396,6 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         # Save to registry if any registration succeeded
         if result.any_success and self.user_registry:
-            successful_services = [
-                sr.service_name for sr in result.services
-                if sr.success and not sr.already_existed
-            ]
             # Include services where user already existed (they're still "registered")
             all_registered = [sr.service_name for sr in result.services if sr.success]
 

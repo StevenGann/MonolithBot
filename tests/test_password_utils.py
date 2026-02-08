@@ -8,8 +8,6 @@ Tests cover:
     - Edge cases and error handling
 """
 
-import string
-
 import pytest
 
 from bot.services.password_utils import (

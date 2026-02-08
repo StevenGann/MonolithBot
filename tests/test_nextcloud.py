@@ -9,8 +9,7 @@ Tests cover:
     - Error handling for various HTTP responses
 """
 
-import re
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import aiohttp
 import pytest

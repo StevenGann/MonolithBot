@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Navidrome API client and service for MonolithBot.
 
@@ -45,6 +43,7 @@ See Also:
     - Navidrome GitHub: https://github.com/navidrome/navidrome
     - bot.cogs.registration.handler: Uses this service for user registration
 """
+from __future__ import annotations
 
 import logging
 from dataclasses import dataclass

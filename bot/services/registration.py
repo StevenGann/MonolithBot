@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Registration orchestrator service for MonolithBot.
 
@@ -37,6 +35,7 @@ See Also:
     - bot.services.romm: Romm user creation
     - bot.cogs.registration.handler: DM handler that uses this service
 """
+from __future__ import annotations
 
 import logging
 import re

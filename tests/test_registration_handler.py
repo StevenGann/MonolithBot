@@ -12,7 +12,7 @@ Tests cover:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
@@ -28,7 +28,6 @@ from bot.cogs.registration.handler import (
 from bot.services.registration import (
     RegistrationResult,
     ServiceResult,
-    ValidationError,
 )
 
 

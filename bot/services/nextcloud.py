@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 NextCloud API client and service for MonolithBot.
 
@@ -44,6 +42,7 @@ See Also:
     - NextCloud OCS API: https://docs.nextcloud.com/server/latest/admin_manual/
     - bot.cogs.registration.handler: Uses this service for user registration
 """
+from __future__ import annotations
 
 import logging
 from dataclasses import dataclass

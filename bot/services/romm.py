@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Romm API client and service for MonolithBot.
 
@@ -48,6 +46,7 @@ See Also:
     - Romm GitHub: https://github.com/rommapp/romm
     - bot.cogs.registration.handler: Uses this service for user registration
 """
+from __future__ import annotations
 
 import logging
 from dataclasses import dataclass

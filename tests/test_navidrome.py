@@ -8,8 +8,7 @@ Tests cover:
     - Error handling and exception classes
 """
 
-import re
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import aiohttp
 import pytest

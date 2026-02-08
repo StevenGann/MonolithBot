@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 User registry for tracking Discord user to service account mappings.
 
@@ -55,6 +53,7 @@ See Also:
     - bot.services.registration: Uses this registry
     - bot.cogs.registration.handler: DM handler that manages registration
 """
+from __future__ import annotations
 
 import json
 import logging
