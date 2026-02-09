@@ -37,7 +37,7 @@ Example:
     >>> exists = await service.user_exists("johndoe")
     >>>
     >>> # Create a new user
-    >>> await service.create_user("johndoe", "securepassword")
+    >>> await service.create_user("johndoe", "securepassword", "john@example.com")
     >>>
     >>> # Always close when done
     >>> await service.close()
@@ -474,6 +474,7 @@ class RommClient:
         self,
         username: str,
         password: str,
+        email: str,
         role: str = "viewer",
     ) -> RommUser:
         """
@@ -482,6 +483,7 @@ class RommClient:
         Args:
             username: The username for the new user. Must be unique.
             password: The password for the new user.
+            email: The email address for the new user. Required by Romm API.
             role: The user's role. Options: "viewer", "editor", "admin".
                 Defaults to "viewer".
 
@@ -497,7 +499,8 @@ class RommClient:
         Example:
             >>> user = await client.create_user(
             ...     "johndoe",
-            ...     "securepassword123"
+            ...     "securepassword123",
+            ...     "john@example.com"
             ... )
             >>> print(f"Created user: {user.username}")
         """
@@ -507,10 +510,11 @@ class RommClient:
         if await self.user_exists(username):
             raise RommUserExistsError(f"User '{username}' already exists")
 
-        # Build user data
+        # Build user data (Romm API requires email)
         user_data = {
             "username": username,
             "password": password,
+            "email": email,
             "role": role,
         }
 
@@ -661,7 +665,7 @@ class RommService:
         >>> print(f"Connected via {service.active_url}")
         >>>
         >>> # Create a user
-        >>> user = await service.create_user("john", "password")
+        >>> user = await service.create_user("john", "password", "john@example.com")
         >>>
         >>> await service.close()
 
@@ -824,6 +828,7 @@ class RommService:
         self,
         username: str,
         password: str,
+        email: str,
         role: str = "viewer",
     ) -> RommUser:
         """
@@ -838,6 +843,7 @@ class RommService:
         return await client.create_user(
             username=username,
             password=password,
+            email=email,
             role=role,
         )
 

@@ -369,7 +369,7 @@ class RegistrationService:
             result.services.append(sr)
 
         if self.romm_service:
-            sr = await self._register_romm(username, password)
+            sr = await self._register_romm(username, password, email)
             result.services.append(sr)
 
         # Log summary
@@ -491,7 +491,7 @@ class RegistrationService:
             )
 
     async def _register_romm(
-        self, username: str, password: str
+        self, username: str, password: str, email: str
     ) -> ServiceResult:
         """Attempt to register user on Romm."""
         try:
@@ -505,10 +505,11 @@ class RegistrationService:
                     already_existed=True,
                 )
 
-            # Create the user
+            # Create the user (Romm API requires email)
             await self.romm_service.create_user(
                 username=username,
                 password=password,
+                email=email,
             )
             logger.info(f"Romm: Created user {username}")
             return ServiceResult(
