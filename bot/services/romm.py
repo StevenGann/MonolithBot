@@ -264,10 +264,14 @@ class RommClient:
         """
         url = f"{self.base_url}/api/token"
 
-        # Romm uses form-encoded OAuth2 password grant
+        # Romm uses form-encoded OAuth2 password grant. The /api/token endpoint
+        # requires a scope parameter; without it, the token has no permissions
+        # and returns 403 on write operations like POST /api/users.
+        # See: https://docs.romm.app/4.5.0/API-and-Development/API-Reference/
         form_data = aiohttp.FormData()
         form_data.add_field("username", self.admin_user)
         form_data.add_field("password", self.admin_password)
+        form_data.add_field("scope", "users.read users.write")
 
         try:
             async with self.session.post(url, data=form_data) as response:
