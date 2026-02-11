@@ -778,9 +778,12 @@ class RegistrationCog(commands.Cog, name="Registration"):
             url = cfg.romm.urls[0]
             lines.append(f"• [Romm]({url})")
 
-        # Additional name/URL pairs from config
+        # Additional name/URL pairs from config (optional description)
         for link in getattr(cfg, "additional_links", []) or []:
-            lines.append(f"• [{link.name}]({link.url})")
+            line = f"• [{link.name}]({link.url})"
+            if getattr(link, "description", None) and link.description.strip():
+                line += f" — {link.description.strip()}"
+            lines.append(line)
 
         return lines
 

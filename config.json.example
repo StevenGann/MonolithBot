@@ -92,11 +92,13 @@
   "additional_links": [
     {
       "name": "Wiki",
-      "url": "https://wiki.example.com"
+      "url": "https://wiki.example.com",
+      "description": "Documentation and guides"
     },
     {
       "name": "Status Page",
-      "url": "https://status.example.com"
+      "url": "https://status.example.com",
+      "description": "Service status and uptime"
     }
   ]
 }

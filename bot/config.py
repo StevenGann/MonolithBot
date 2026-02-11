@@ -403,10 +403,12 @@ class AdditionalLinkConfig:
     Attributes:
         name: Display name for the link (e.g. "Wiki", "Status").
         url: Full URL (e.g. "https://wiki.example.com").
+        description: Optional short description shown next to the link in /help.
     """
 
     name: str
     url: str
+    description: str = ""
 
 
 @dataclass
@@ -1301,7 +1303,15 @@ def _build_additional_links_config(json_config: dict[str, Any]) -> list[Addition
         name = item.get("name")
         url = item.get("url")
         if name is not None and url is not None and isinstance(name, str) and isinstance(url, str) and name.strip() and url.strip():
-            result.append(AdditionalLinkConfig(name=name.strip(), url=url.strip()))
+            desc = item.get("description")
+            description = desc.strip() if isinstance(desc, str) and desc else ""
+            result.append(
+                AdditionalLinkConfig(
+                    name=name.strip(),
+                    url=url.strip(),
+                    description=description,
+                )
+            )
     return result
 
 
