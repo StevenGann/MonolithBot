@@ -21,7 +21,7 @@ MonolithBot is a Discord bot with three main feature areas:
 
 1. **Jellyfin Media Server**: Content announcements, random suggestions, and health monitoring
 2. **Minecraft Game Servers**: Multi-server health monitoring and player join announcements
-3. **Multi-Service User Registration**: One-click registration across Jellyfin, NextCloud, Navidrome, and Romm
+3. **Multi-Service User Registration**: One-click registration across Jellyfin, NextCloud, Navidrome, Organizr, and Romm
 
 ### Technology Stack
 
@@ -62,6 +62,7 @@ MonolithBot/
 │       ├── minecraft.py              # Minecraft Server List Ping client + service
 │       ├── navidrome.py              # Navidrome API client + service
 │       ├── nextcloud.py              # NextCloud OCS API client + service
+│       ├── organizr.py               # Organizr v2 API client + service
 │       ├── romm.py                   # Romm API client + service
 │       ├── registration.py           # Multi-service registration orchestrator
 │       ├── password_utils.py         # Secure password generation
@@ -82,6 +83,7 @@ MonolithBot/
 │   ├── test_registration_handler.py  # Registration cog tests
 │   ├── test_navidrome.py             # Navidrome service tests
 │   ├── test_nextcloud.py             # NextCloud service tests
+│   ├── test_organizr.py              # Organizr service tests
 │   ├── test_romm.py                  # Romm service tests
 │   ├── test_password_utils.py        # Password generation tests
 │   └── test_user_registry.py         # User registry tests
@@ -130,7 +132,7 @@ The main module handles:
 
 ### 2. Configuration (`bot/config.py`)
 
-Uses dataclasses for type safety. `Config` aggregates: `DiscordConfig`, `JellyfinConfig`, `MinecraftConfig`, plus optional `NextCloudConfig`, `NavidromeConfig`, `RommConfig`, and `RegistrationConfig`.
+Uses dataclasses for type safety. `Config` aggregates: `DiscordConfig`, `JellyfinConfig`, `MinecraftConfig`, plus optional `NextCloudConfig`, `NavidromeConfig`, `OrganizrConfig`, `RommConfig`, and `RegistrationConfig`.
 
 **Loading priority**: Environment variables override JSON file values. Required fields are validated; `ConfigurationError` is raised with clear messages when invalid.
 
@@ -229,7 +231,7 @@ Factory `create_scheduler(config)` returns an `AsyncIOScheduler` with timezone a
 4. Check UserRegistry: if already registered, optionally offer password reset
 5. RegistrationService.register_user():
    a. Generate password (password_utils.generate_password)
-   b. For each enabled service (Jellyfin, NextCloud, Navidrome, Romm):
+   b. For each enabled service (Jellyfin, NextCloud, Navidrome, Organizr, Romm):
       - Check if user exists
       - If not, create user with generated password
       - Record result (success, skipped, failed)
@@ -251,7 +253,7 @@ See `config.json.example` and `.env.example` for full examples. The README docum
 The registration feature allows new Discord users to create accounts on multiple self-hosted services with a single command. It requires:
 
 - **Message Content Intent**: Enabled in Discord Developer Portal for text-based DM registration
-- **Admin credentials**: For each service (NextCloud, Navidrome, Romm); Jellyfin uses its API key
+- **Admin credentials**: For each service (NextCloud, Navidrome, Organizr, Romm); Jellyfin uses its API key
 - **User registry**: Persists Discord ID → username/email in a JSON file (path configurable)
 
 **Adding a new registration service**:
@@ -504,6 +506,7 @@ tests/
 ├── test_registration_handler.py # Registration cog
 ├── test_navidrome.py           # Navidrome service
 ├── test_nextcloud.py           # NextCloud service
+├── test_organizr.py            # Organizr service
 ├── test_romm.py                # Romm service
 ├── test_password_utils.py      # Password generation
 └── test_user_registry.py       # User registry persistence

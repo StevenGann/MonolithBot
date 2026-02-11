@@ -45,6 +45,7 @@ from bot.services.jellyfin import JellyfinService
 from bot.services.minecraft import MinecraftService
 from bot.services.nextcloud import NextCloudService
 from bot.services.navidrome import NavidromeService
+from bot.services.organizr import OrganizrService
 from bot.services.romm import RommService
 from bot.services.registration import RegistrationService
 
@@ -119,6 +120,8 @@ class MonolithBot(commands.Bot):
             None if NextCloud integration is disabled.
         navidrome_service: Shared NavidromeService instance for user registration.
             None if Navidrome integration is disabled.
+        organizr_service: Shared OrganizrService instance for user registration.
+            None if Organizr integration is disabled.
         romm_service: Shared RommService instance for user registration.
             None if Romm integration is disabled.
         registration_service: Shared RegistrationService instance for multi-service registration.
@@ -167,6 +170,7 @@ class MonolithBot(commands.Bot):
         self.minecraft_service: Optional[MinecraftService] = None
         self.nextcloud_service: Optional[NextCloudService] = None
         self.navidrome_service: Optional[NavidromeService] = None
+        self.organizr_service: Optional[OrganizrService] = None
         self.romm_service: Optional[RommService] = None
         self.registration_service: Optional[RegistrationService] = None
 
@@ -231,6 +235,16 @@ class MonolithBot(commands.Bot):
                 f"Navidrome service initialized with {len(self.config.navidrome.urls)} URL(s)"
             )
 
+        if self.config.organizr.enabled:
+            self.organizr_service = OrganizrService(
+                urls=self.config.organizr.urls,
+                admin_user=self.config.organizr.admin_user,
+                admin_password=self.config.organizr.admin_password,
+            )
+            logger.info(
+                f"Organizr service initialized with {len(self.config.organizr.urls)} URL(s)"
+            )
+
         if self.config.romm.enabled:
             self.romm_service = RommService(
                 urls=self.config.romm.urls,
@@ -247,6 +261,7 @@ class MonolithBot(commands.Bot):
                 jellyfin_service=self.jellyfin_service,
                 nextcloud_service=self.nextcloud_service,
                 navidrome_service=self.navidrome_service,
+                organizr_service=self.organizr_service,
                 romm_service=self.romm_service,
             )
             logger.info("Registration service initialized")
@@ -522,6 +537,10 @@ class MonolithBot(commands.Bot):
         if self.navidrome_service:
             await self.navidrome_service.close()
             logger.info("Navidrome service closed")
+
+        if self.organizr_service:
+            await self.organizr_service.close()
+            logger.info("Organizr service closed")
 
         if self.romm_service:
             await self.romm_service.close()

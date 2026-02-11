@@ -305,6 +305,40 @@ class NavidromeConfig:
 
 
 @dataclass
+class OrganizrConfig:
+    """
+    Organizr server configuration for user provisioning.
+
+    Uses the Organizr v2 REST API for user management.
+    Requires admin credentials (session cookie after login).
+
+    Attributes:
+        enabled: Whether Organizr integration is enabled.
+        urls: List of Organizr server URLs to try in order (for failover).
+            Each URL should be the base URL like "https://organizr.example.com".
+        admin_user: Admin username for API authentication.
+        admin_password: Admin password for API authentication.
+
+    See Also:
+        - Organizr GitHub: https://github.com/causefx/Organizr
+    """
+
+    enabled: bool = False
+    urls: list[str] = field(default_factory=list)
+    admin_user: str = ""
+    admin_password: str = ""
+
+    def __post_init__(self) -> None:
+        """Normalize all URLs by removing trailing slashes."""
+        self.urls = [url.rstrip("/") for url in self.urls]
+
+    @property
+    def url(self) -> str:
+        """Get the primary (first) URL for backward compatibility."""
+        return self.urls[0] if self.urls else ""
+
+
+@dataclass
 class RommConfig:
     """
     Romm server configuration for user provisioning.
@@ -389,6 +423,7 @@ class Config:
         minecraft: Minecraft server monitoring settings.
         nextcloud: NextCloud server connection settings for user provisioning.
         navidrome: Navidrome server connection settings for user provisioning.
+        organizr: Organizr server connection settings for user provisioning.
         romm: Romm server connection settings for user provisioning.
         registration: Multi-service user registration feature settings.
         additional_links: Optional list of name/URL pairs shown in /help.
@@ -412,6 +447,7 @@ class Config:
     minecraft: MinecraftConfig
     nextcloud: NextCloudConfig
     navidrome: NavidromeConfig
+    organizr: OrganizrConfig
     romm: RommConfig
     registration: RegistrationConfig
     additional_links: list[AdditionalLinkConfig]
@@ -1056,6 +1092,86 @@ def _build_navidrome_config(json_config: dict[str, Any]) -> NavidromeConfig:
     )
 
 
+def _build_organizr_config(json_config: dict[str, Any]) -> OrganizrConfig:
+    """
+    Build Organizr configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        Populated OrganizrConfig object.
+
+    Raises:
+        ConfigurationError: If Organizr is enabled but required credentials
+            are not properly configured.
+
+    Environment Variables:
+        - ORGANIZR_ENABLED: Whether Organizr integration is enabled
+        - ORGANIZR_URL: Organizr server URL(s), comma-separated for failover
+        - ORGANIZR_ADMIN_USER: Admin username for API
+        - ORGANIZR_ADMIN_PASSWORD: Admin password for API
+    """
+    organizr_json = json_config.get("organizr", {})
+
+    enabled_env = _get_env_bool("ORGANIZR_ENABLED")
+    enabled = (
+        enabled_env
+        if enabled_env is not None
+        else organizr_json.get("enabled", False)
+    )
+
+    urls_from_env = _get_env_list("ORGANIZR_URL")
+    if urls_from_env:
+        urls = urls_from_env
+    else:
+        urls_from_json = organizr_json.get("urls")
+        if urls_from_json is not None:
+            if isinstance(urls_from_json, list):
+                urls = urls_from_json
+            else:
+                urls = [urls_from_json]
+        else:
+            url_from_json = organizr_json.get("url")
+            if url_from_json:
+                urls = (
+                    [url_from_json]
+                    if isinstance(url_from_json, str)
+                    else url_from_json
+                )
+            else:
+                urls = []
+
+    if enabled and not urls:
+        raise ConfigurationError(
+            "Organizr URL is required when enabled. Set ORGANIZR_URL environment "
+            "variable or 'organizr.url'/'organizr.urls' in config.json"
+        )
+
+    admin_user = _get_env("ORGANIZR_ADMIN_USER") or organizr_json.get(
+        "admin_user", ""
+    )
+    admin_password = _get_env("ORGANIZR_ADMIN_PASSWORD") or organizr_json.get(
+        "admin_password", ""
+    )
+
+    if enabled and (not admin_user or not admin_password):
+        raise ConfigurationError(
+            "Organizr admin credentials are required when enabled. Set "
+            "ORGANIZR_ADMIN_USER and ORGANIZR_ADMIN_PASSWORD environment variables "
+            "or 'organizr.admin_user' and 'organizr.admin_password' in config.json"
+        )
+
+    return OrganizrConfig(
+        enabled=enabled,
+        urls=urls,
+        admin_user=admin_user,
+        admin_password=admin_password,
+    )
+
+
 def _build_romm_config(json_config: dict[str, Any]) -> RommConfig:
     """
     Build Romm configuration from JSON and environment variables.
@@ -1242,6 +1358,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     minecraft_config = _build_minecraft_config(json_config)
     nextcloud_config = _build_nextcloud_config(json_config)
     navidrome_config = _build_navidrome_config(json_config)
+    organizr_config = _build_organizr_config(json_config)
     romm_config = _build_romm_config(json_config)
     registration_config = _build_registration_config(json_config)
     additional_links = _build_additional_links_config(json_config)
@@ -1252,6 +1369,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         minecraft=minecraft_config,
         nextcloud=nextcloud_config,
         navidrome=navidrome_config,
+        organizr=organizr_config,
         romm=romm_config,
         registration=registration_config,
         additional_links=additional_links,

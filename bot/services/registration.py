@@ -2,7 +2,7 @@
 Registration orchestrator service for MonolithBot.
 
 This module coordinates user registration across multiple services (Jellyfin,
-NextCloud, Navidrome, Romm). It handles the multi-service registration flow,
+NextCloud, Navidrome, Organizr, Romm). It handles the multi-service registration flow,
 password generation, and result aggregation.
 
 Key Features:
@@ -32,6 +32,7 @@ See Also:
     - bot.services.jellyfin: Jellyfin user creation
     - bot.services.nextcloud: NextCloud user creation
     - bot.services.navidrome: Navidrome user creation
+    - bot.services.organizr: Organizr user creation
     - bot.services.romm: Romm user creation
     - bot.cogs.registration.handler: DM handler that uses this service
 """
@@ -274,6 +275,7 @@ class RegistrationService:
         jellyfin_service=None,
         nextcloud_service=None,
         navidrome_service=None,
+        organizr_service=None,
         romm_service=None,
     ) -> None:
         """
@@ -283,6 +285,7 @@ class RegistrationService:
             jellyfin_service: Optional JellyfinService instance.
             nextcloud_service: Optional NextCloudService instance.
             navidrome_service: Optional NavidromeService instance.
+            organizr_service: Optional OrganizrService instance.
             romm_service: Optional RommService instance.
 
         Note:
@@ -292,6 +295,7 @@ class RegistrationService:
         self.jellyfin_service = jellyfin_service
         self.nextcloud_service = nextcloud_service
         self.navidrome_service = navidrome_service
+        self.organizr_service = organizr_service
         self.romm_service = romm_service
 
     @property
@@ -304,6 +308,8 @@ class RegistrationService:
             services.append("NextCloud")
         if self.navidrome_service:
             services.append("Navidrome")
+        if self.organizr_service:
+            services.append("Organizr")
         if self.romm_service:
             services.append("Romm")
         return services
@@ -366,6 +372,10 @@ class RegistrationService:
 
         if self.navidrome_service:
             sr = await self._register_navidrome(username, password, email)
+            result.services.append(sr)
+
+        if self.organizr_service:
+            sr = await self._register_organizr(username, password, email)
             result.services.append(sr)
 
         if self.romm_service:
@@ -522,6 +532,41 @@ class RegistrationService:
             logger.error(f"Romm: Failed to create user {username}: {e}")
             return ServiceResult(
                 service_name="Romm",
+                success=False,
+                message="Registration failed",
+                error=str(e),
+            )
+
+    async def _register_organizr(
+        self, username: str, password: str, email: str
+    ) -> ServiceResult:
+        """Attempt to register user on Organizr."""
+        try:
+            if await self.organizr_service.user_exists(username):
+                logger.info(f"Organizr: User {username} already exists")
+                return ServiceResult(
+                    service_name="Organizr",
+                    success=True,
+                    message="Account already exists",
+                    already_existed=True,
+                )
+
+            await self.organizr_service.create_user(
+                username=username,
+                password=password,
+                email=email,
+            )
+            logger.info(f"Organizr: Created user {username}")
+            return ServiceResult(
+                service_name="Organizr",
+                success=True,
+                message="Account created successfully",
+            )
+
+        except Exception as e:
+            logger.error(f"Organizr: Failed to create user {username}: {e}")
+            return ServiceResult(
+                service_name="Organizr",
                 success=False,
                 message="Registration failed",
                 error=str(e),

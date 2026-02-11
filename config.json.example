@@ -72,6 +72,12 @@
     "admin_user": "YOUR_NAVIDROME_ADMIN_USER",
     "admin_password": "YOUR_NAVIDROME_ADMIN_PASSWORD"
   },
+  "organizr": {
+    "enabled": false,
+    "urls": ["https://organizr.example.com"],
+    "admin_user": "YOUR_ORGANIZR_ADMIN_USER",
+    "admin_password": "YOUR_ORGANIZR_ADMIN_PASSWORD"
+  },
   "romm": {
     "enabled": false,
     "urls": [

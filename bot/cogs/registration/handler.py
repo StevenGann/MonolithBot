@@ -113,6 +113,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
             jellyfin_service=self.bot.jellyfin_service,
             nextcloud_service=getattr(self.bot, "nextcloud_service", None),
             navidrome_service=getattr(self.bot, "navidrome_service", None),
+            organizr_service=getattr(self.bot, "organizr_service", None),
             romm_service=getattr(self.bot, "romm_service", None),
         )
 
@@ -768,6 +769,10 @@ class RegistrationCog(commands.Cog, name="Registration"):
         if getattr(cfg, "navidrome", None) and cfg.navidrome.enabled and cfg.navidrome.urls:
             url = cfg.navidrome.urls[0]
             lines.append(f"• [Navidrome]({url})")
+
+        if getattr(cfg, "organizr", None) and cfg.organizr.enabled and cfg.organizr.urls:
+            url = cfg.organizr.urls[0]
+            lines.append(f"• [Organizr]({url})")
 
         if getattr(cfg, "romm", None) and cfg.romm.enabled and cfg.romm.urls:
             url = cfg.romm.urls[0]
