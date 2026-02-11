@@ -739,6 +739,46 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         return embed
 
+    def _get_services_with_urls(self) -> list[str]:
+        """
+        Build a list of enabled services and their first URL for the help embed.
+
+        Returns:
+            List of formatted lines, e.g. "• [Jellyfin](http://...)" or
+            "• **Minecraft — Survival**: `host:port`". Empty if no services.
+        """
+        lines: list[str] = []
+        cfg = self.bot.config
+
+        if getattr(cfg, "jellyfin", None) and cfg.jellyfin.enabled and cfg.jellyfin.urls:
+            url = cfg.jellyfin.urls[0]
+            lines.append(f"• [Jellyfin]({url})")
+
+        if getattr(cfg, "minecraft", None) and cfg.minecraft.enabled and cfg.minecraft.servers:
+            for server in cfg.minecraft.servers:
+                if server.urls:
+                    # Game server address, not a web link
+                    addr = server.urls[0]
+                    lines.append(f"• **Minecraft — {server.name}**: `{addr}`")
+
+        if getattr(cfg, "nextcloud", None) and cfg.nextcloud.enabled and cfg.nextcloud.urls:
+            url = cfg.nextcloud.urls[0]
+            lines.append(f"• [NextCloud]({url})")
+
+        if getattr(cfg, "navidrome", None) and cfg.navidrome.enabled and cfg.navidrome.urls:
+            url = cfg.navidrome.urls[0]
+            lines.append(f"• [Navidrome]({url})")
+
+        if getattr(cfg, "romm", None) and cfg.romm.enabled and cfg.romm.urls:
+            url = cfg.romm.urls[0]
+            lines.append(f"• [Romm]({url})")
+
+        # Additional name/URL pairs from config
+        for link in getattr(cfg, "additional_links", []) or []:
+            lines.append(f"• [{link.name}]({link.url})")
+
+        return lines
+
     def _create_full_help_embed(self) -> discord.Embed:
         """
         Create a comprehensive help embed listing all available commands.
@@ -791,15 +831,14 @@ class RegistrationCog(commands.Cog, name="Registration"):
             inline=False,
         )
 
-        # Show available services
-        if self.registration_service:
-            services = self.registration_service.enabled_services
-            if services:
-                embed.add_field(
-                    name="🌐 Available Services",
-                    value="\n".join(f"• {s}" for s in services),
-                    inline=True,
-                )
+        # Show available services with first URL for each
+        service_lines = self._get_services_with_urls()
+        if service_lines:
+            embed.add_field(
+                name="🌐 Available Services",
+                value="\n".join(service_lines),
+                inline=False,
+            )
 
         # Tips
         embed.add_field(

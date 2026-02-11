@@ -359,6 +359,23 @@ class RegistrationConfig:
 
 
 @dataclass
+class AdditionalLinkConfig:
+    """
+    A single name/URL pair for the help embed.
+
+    Used by the "additional_links" config section to show arbitrary
+    links (e.g. Wiki, Status Page) in the /help command.
+
+    Attributes:
+        name: Display name for the link (e.g. "Wiki", "Status").
+        url: Full URL (e.g. "https://wiki.example.com").
+    """
+
+    name: str
+    url: str
+
+
+@dataclass
 class Config:
     """
     Main configuration container aggregating all settings.
@@ -374,6 +391,7 @@ class Config:
         navidrome: Navidrome server connection settings for user provisioning.
         romm: Romm server connection settings for user provisioning.
         registration: Multi-service user registration feature settings.
+        additional_links: Optional list of name/URL pairs shown in /help.
 
     Example:
         >>> config = load_config(Path("config.json"))
@@ -396,6 +414,7 @@ class Config:
     navidrome: NavidromeConfig
     romm: RommConfig
     registration: RegistrationConfig
+    additional_links: list[AdditionalLinkConfig]
 
 
 # =============================================================================
@@ -1143,6 +1162,33 @@ def _build_registration_config(json_config: dict[str, Any]) -> RegistrationConfi
     return RegistrationConfig(enabled=enabled, registry_file=registry_file)
 
 
+def _build_additional_links_config(json_config: dict[str, Any]) -> list[AdditionalLinkConfig]:
+    """
+    Build the list of additional name/URL links from JSON.
+
+    Used in the /help command to show extra links (e.g. Wiki, Status Page).
+    Entries missing "name" or "url" are skipped.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        List of AdditionalLinkConfig. Empty if key is missing or invalid.
+    """
+    raw = json_config.get("additional_links")
+    if not isinstance(raw, list):
+        return []
+    result: list[AdditionalLinkConfig] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        url = item.get("url")
+        if name is not None and url is not None and isinstance(name, str) and isinstance(url, str) and name.strip() and url.strip():
+            result.append(AdditionalLinkConfig(name=name.strip(), url=url.strip()))
+    return result
+
+
 # =============================================================================
 # Public API
 # =============================================================================
@@ -1198,6 +1244,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     navidrome_config = _build_navidrome_config(json_config)
     romm_config = _build_romm_config(json_config)
     registration_config = _build_registration_config(json_config)
+    additional_links = _build_additional_links_config(json_config)
 
     return Config(
         discord=discord_config,
@@ -1207,4 +1254,5 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         navidrome=navidrome_config,
         romm=romm_config,
         registration=registration_config,
+        additional_links=additional_links,
     )

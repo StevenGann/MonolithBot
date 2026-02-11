@@ -6,12 +6,25 @@
   },
   "jellyfin": {
     "enabled": true,
-    "urls": ["http://primary:8096", "http://backup:8096"],
+    "urls": [
+      "http://primary:8096",
+      "http://backup:8096"
+    ],
     "api_key": "YOUR_JELLYFIN_API_KEY",
-    "content_types": ["Movie", "Series", "Episode", "Audio"],
+    "content_types": [
+      "Movie",
+      "Series",
+      "Episode",
+      "Audio"
+    ],
     "schedule": {
-      "announcement_times": ["17:00"],
-      "suggestion_times": ["12:00", "20:00"],
+      "announcement_times": [
+        "17:00"
+      ],
+      "suggestion_times": [
+        "12:00",
+        "20:00"
+      ],
       "timezone": "America/Los_Angeles",
       "health_check_interval_minutes": 5,
       "lookback_hours": 24,
@@ -25,11 +38,16 @@
     "servers": [
       {
         "name": "Survival",
-        "urls": ["mc.example.com:25565", "backup-mc.example.com:25565"]
+        "urls": [
+          "mc.example.com:25565",
+          "backup-mc.example.com:25565"
+        ]
       },
       {
         "name": "Creative",
-        "urls": ["creative.example.com:25565"]
+        "urls": [
+          "creative.example.com:25565"
+        ]
       }
     ],
     "schedule": {
@@ -40,23 +58,39 @@
   },
   "nextcloud": {
     "enabled": false,
-    "urls": ["https://nextcloud.example.com"],
+    "urls": [
+      "https://nextcloud.example.com"
+    ],
     "admin_user": "YOUR_NEXTCLOUD_ADMIN_USER",
     "admin_password": "YOUR_NEXTCLOUD_ADMIN_PASSWORD"
   },
   "navidrome": {
     "enabled": false,
-    "urls": ["https://navidrome.example.com"],
+    "urls": [
+      "https://navidrome.example.com"
+    ],
     "admin_user": "YOUR_NAVIDROME_ADMIN_USER",
     "admin_password": "YOUR_NAVIDROME_ADMIN_PASSWORD"
   },
   "romm": {
     "enabled": false,
-    "urls": ["https://romm.example.com"],
+    "urls": [
+      "https://romm.example.com"
+    ],
     "admin_user": "YOUR_ROMM_ADMIN_USER",
     "admin_password": "YOUR_ROMM_ADMIN_PASSWORD"
   },
   "registration": {
     "enabled": false
-  }
+  },
+  "additional_links": [
+    {
+      "name": "Wiki",
+      "url": "https://wiki.example.com"
+    },
+    {
+      "name": "Status Page",
+      "url": "https://status.example.com"
+    }
+  ]
 }
