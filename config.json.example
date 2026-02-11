@@ -11,6 +11,7 @@
       "http://backup:8096"
     ],
     "api_key": "YOUR_JELLYFIN_API_KEY",
+    "description": "Media server",
     "content_types": [
       "Movie",
       "Series",
@@ -41,13 +42,15 @@
         "urls": [
           "mc.example.com:25565",
           "backup-mc.example.com:25565"
-        ]
+        ],
+        "description": "Main survival world"
       },
       {
         "name": "Creative",
         "urls": [
           "creative.example.com:25565"
-        ]
+        ],
+        "description": "Creative building"
       }
     ],
     "schedule": {
@@ -62,7 +65,8 @@
       "https://nextcloud.example.com"
     ],
     "admin_user": "YOUR_NEXTCLOUD_ADMIN_USER",
-    "admin_password": "YOUR_NEXTCLOUD_ADMIN_PASSWORD"
+    "admin_password": "YOUR_NEXTCLOUD_ADMIN_PASSWORD",
+    "description": "File sync and share"
   },
   "navidrome": {
     "enabled": false,
@@ -70,13 +74,15 @@
       "https://navidrome.example.com"
     ],
     "admin_user": "YOUR_NAVIDROME_ADMIN_USER",
-    "admin_password": "YOUR_NAVIDROME_ADMIN_PASSWORD"
+    "admin_password": "YOUR_NAVIDROME_ADMIN_PASSWORD",
+    "description": "Music streaming"
   },
   "organizr": {
     "enabled": false,
     "urls": ["https://organizr.example.com"],
     "admin_user": "YOUR_ORGANIZR_ADMIN_USER",
-    "admin_password": "YOUR_ORGANIZR_ADMIN_PASSWORD"
+    "admin_password": "YOUR_ORGANIZR_ADMIN_PASSWORD",
+    "description": "Services dashboard"
   },
   "romm": {
     "enabled": false,
@@ -84,7 +90,8 @@
       "https://romm.example.com"
     ],
     "admin_user": "YOUR_ROMM_ADMIN_USER",
-    "admin_password": "YOUR_ROMM_ADMIN_PASSWORD"
+    "admin_password": "YOUR_ROMM_ADMIN_PASSWORD",
+    "description": "ROM library manager"
   },
   "registration": {
     "enabled": false

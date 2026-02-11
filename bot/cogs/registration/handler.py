@@ -753,30 +753,47 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         if getattr(cfg, "jellyfin", None) and cfg.jellyfin.enabled and cfg.jellyfin.urls:
             url = cfg.jellyfin.urls[0]
-            lines.append(f"• [Jellyfin]({url})")
+            line = f"• [Jellyfin]({url})"
+            if getattr(cfg.jellyfin, "description", None) and cfg.jellyfin.description.strip():
+                line += f" — {cfg.jellyfin.description.strip()}"
+            lines.append(line)
 
         if getattr(cfg, "minecraft", None) and cfg.minecraft.enabled and cfg.minecraft.servers:
             for server in cfg.minecraft.servers:
                 if server.urls:
-                    # Game server address, not a web link
                     addr = server.urls[0]
-                    lines.append(f"• **Minecraft — {server.name}**: `{addr}`")
+                    line = f"• **Minecraft — {server.name}**: `{addr}`"
+                    if getattr(server, "description", None) and server.description.strip():
+                        line += f" — {server.description.strip()}"
+                    lines.append(line)
 
         if getattr(cfg, "nextcloud", None) and cfg.nextcloud.enabled and cfg.nextcloud.urls:
             url = cfg.nextcloud.urls[0]
-            lines.append(f"• [NextCloud]({url})")
+            line = f"• [NextCloud]({url})"
+            if getattr(cfg.nextcloud, "description", None) and cfg.nextcloud.description.strip():
+                line += f" — {cfg.nextcloud.description.strip()}"
+            lines.append(line)
 
         if getattr(cfg, "navidrome", None) and cfg.navidrome.enabled and cfg.navidrome.urls:
             url = cfg.navidrome.urls[0]
-            lines.append(f"• [Navidrome]({url})")
+            line = f"• [Navidrome]({url})"
+            if getattr(cfg.navidrome, "description", None) and cfg.navidrome.description.strip():
+                line += f" — {cfg.navidrome.description.strip()}"
+            lines.append(line)
 
         if getattr(cfg, "organizr", None) and cfg.organizr.enabled and cfg.organizr.urls:
             url = cfg.organizr.urls[0]
-            lines.append(f"• [Organizr]({url})")
+            line = f"• [Organizr]({url})"
+            if getattr(cfg.organizr, "description", None) and cfg.organizr.description.strip():
+                line += f" — {cfg.organizr.description.strip()}"
+            lines.append(line)
 
         if getattr(cfg, "romm", None) and cfg.romm.enabled and cfg.romm.urls:
             url = cfg.romm.urls[0]
-            lines.append(f"• [Romm]({url})")
+            line = f"• [Romm]({url})"
+            if getattr(cfg.romm, "description", None) and cfg.romm.description.strip():
+                line += f" — {cfg.romm.description.strip()}"
+            lines.append(line)
 
         # Additional name/URL pairs from config (optional description)
         for link in getattr(cfg, "additional_links", []) or []:

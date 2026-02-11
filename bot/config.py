@@ -139,11 +139,13 @@ class JellyfinConfig:
         content_types: List of Jellyfin content types to announce.
             Valid values: "Movie", "Series", "Audio", "Episode"
         schedule: Scheduling settings for Jellyfin-specific tasks.
+        description: Optional short description shown next to the link in /help.
     """
 
     enabled: bool
     urls: list[str]
     api_key: str
+    description: str = ""
     content_types: list[str] = field(
         default_factory=lambda: ["Movie", "Series", "Audio"]
     )
@@ -194,10 +196,12 @@ class MinecraftServerConfig:
         urls: List of server addresses to try in order (for failover).
             Each should be in "host:port" or "host" format (default port 25565).
             During health checks, URLs are tried in order until one works.
+        description: Optional short description shown next to the server in /help.
     """
 
     name: str
     urls: list[str]
+    description: str = ""
 
     def __post_init__(self) -> None:
         """Validate server configuration."""
@@ -250,6 +254,7 @@ class NextCloudConfig:
             Each URL should be the base URL like "https://nextcloud.example.com".
         admin_user: Admin username for OCS API authentication.
         admin_password: Admin password for OCS API authentication.
+        description: Optional short description shown next to the link in /help.
 
     See Also:
         - NextCloud OCS API: https://docs.nextcloud.com/server/latest/admin_manual/
@@ -259,6 +264,7 @@ class NextCloudConfig:
     urls: list[str] = field(default_factory=list)
     admin_user: str = ""
     admin_password: str = ""
+    description: str = ""
 
     def __post_init__(self) -> None:
         """Normalize all URLs by removing trailing slashes."""
@@ -284,6 +290,7 @@ class NavidromeConfig:
             Each URL should be the base URL like "https://navidrome.example.com".
         admin_user: Admin username for API authentication.
         admin_password: Admin password for API authentication.
+        description: Optional short description shown next to the link in /help.
 
     See Also:
         - Navidrome API documentation
@@ -293,6 +300,7 @@ class NavidromeConfig:
     urls: list[str] = field(default_factory=list)
     admin_user: str = ""
     admin_password: str = ""
+    description: str = ""
 
     def __post_init__(self) -> None:
         """Normalize all URLs by removing trailing slashes."""
@@ -318,6 +326,7 @@ class OrganizrConfig:
             Each URL should be the base URL like "https://organizr.example.com".
         admin_user: Admin username for API authentication.
         admin_password: Admin password for API authentication.
+        description: Optional short description shown next to the link in /help.
 
     See Also:
         - Organizr GitHub: https://github.com/causefx/Organizr
@@ -327,6 +336,7 @@ class OrganizrConfig:
     urls: list[str] = field(default_factory=list)
     admin_user: str = ""
     admin_password: str = ""
+    description: str = ""
 
     def __post_init__(self) -> None:
         """Normalize all URLs by removing trailing slashes."""
@@ -352,6 +362,7 @@ class RommConfig:
             Each URL should be the base URL like "https://romm.example.com".
         admin_user: Admin username for API authentication.
         admin_password: Admin password for API authentication.
+        description: Optional short description shown next to the link in /help.
 
     See Also:
         - Romm GitHub: https://github.com/rommapp/romm
@@ -361,6 +372,7 @@ class RommConfig:
     urls: list[str] = field(default_factory=list)
     admin_user: str = ""
     admin_password: str = ""
+    description: str = ""
 
     def __post_init__(self) -> None:
         """Normalize all URLs by removing trailing slashes."""
@@ -787,12 +799,16 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
     schedule_json = jellyfin_json.get("schedule", {})
     schedule_config = _build_jellyfin_schedule_config(schedule_json)
 
+    desc = jellyfin_json.get("description")
+    description = desc.strip() if isinstance(desc, str) and desc else ""
+
     return JellyfinConfig(
         enabled=enabled,
         urls=urls or [],
         api_key=api_key or "",
         content_types=content_types,
         schedule=schedule_config,
+        description=description,
     )
 
 
@@ -865,7 +881,10 @@ def _build_minecraft_server_config(
                 f"Minecraft server '{name}' must have 'urls' (list) or 'url' (string)"
             )
 
-    return MinecraftServerConfig(name=name, urls=urls)
+    desc = server_json.get("description")
+    description = desc.strip() if isinstance(desc, str) and desc else ""
+
+    return MinecraftServerConfig(name=name, urls=urls, description=description)
 
 
 def _build_minecraft_config(json_config: dict[str, Any]) -> MinecraftConfig:
@@ -1011,11 +1030,15 @@ def _build_nextcloud_config(json_config: dict[str, Any]) -> NextCloudConfig:
             "or 'nextcloud.admin_user' and 'nextcloud.admin_password' in config.json"
         )
 
+    desc = nextcloud_json.get("description")
+    description = desc.strip() if isinstance(desc, str) and desc else ""
+
     return NextCloudConfig(
         enabled=enabled,
         urls=urls,
         admin_user=admin_user,
         admin_password=admin_password,
+        description=description,
     )
 
 
@@ -1086,11 +1109,15 @@ def _build_navidrome_config(json_config: dict[str, Any]) -> NavidromeConfig:
             "or 'navidrome.admin_user' and 'navidrome.admin_password' in config.json"
         )
 
+    desc = navidrome_json.get("description")
+    description = desc.strip() if isinstance(desc, str) and desc else ""
+
     return NavidromeConfig(
         enabled=enabled,
         urls=urls,
         admin_user=admin_user,
         admin_password=admin_password,
+        description=description,
     )
 
 
@@ -1166,11 +1193,15 @@ def _build_organizr_config(json_config: dict[str, Any]) -> OrganizrConfig:
             "or 'organizr.admin_user' and 'organizr.admin_password' in config.json"
         )
 
+    desc = organizr_json.get("description")
+    description = desc.strip() if isinstance(desc, str) and desc else ""
+
     return OrganizrConfig(
         enabled=enabled,
         urls=urls,
         admin_user=admin_user,
         admin_password=admin_password,
+        description=description,
     )
 
 
@@ -1237,11 +1268,15 @@ def _build_romm_config(json_config: dict[str, Any]) -> RommConfig:
             "or 'romm.admin_user' and 'romm.admin_password' in config.json"
         )
 
+    desc = romm_json.get("description")
+    description = desc.strip() if isinstance(desc, str) and desc else ""
+
     return RommConfig(
         enabled=enabled,
         urls=urls,
         admin_user=admin_user,
         admin_password=admin_password,
+        description=description,
     )
 
 
