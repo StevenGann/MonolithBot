@@ -96,6 +96,12 @@
   "registration": {
     "enabled": false
   },
+  "logging": {
+    "log_directory": "logs",
+    "log_level": "INFO",
+    "log_to_console": true,
+    "log_to_file": true
+  },
   "additional_links": [
     {
       "name": "Wiki",

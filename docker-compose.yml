@@ -3,11 +3,12 @@ services:
     image: ghcr.io/stevengann/monolithbot:latest
     container_name: monolithbot
     restart: unless-stopped
-    # Mount config.json from host directory
+    # Mount config.json and logs directory from host
     # All configuration is read from config.json
     # Environment variables can optionally override JSON values if needed
     volumes:
       - /mnt/App-Storage/Container-Data/monolithbot/config/config.json:/app/config.json:ro
+      - /mnt/App-Storage/Container-Data/monolithbot/logs:/app/logs
     # Optional: Override specific settings via environment variables
     # (Environment variables take precedence over config.json)
     # Uncomment and set these if you want to override config.json values:
@@ -15,6 +16,8 @@ services:
     #   - DISCORD_TOKEN=${DISCORD_TOKEN}
     #   - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
     #   - JELLYFIN_URL=${JELLYFIN_URL}
+    #   - LOG_DIRECTORY=/app/logs
+    #   - LOG_LEVEL=INFO
 
     # Optional: Connect to the same network as Jellyfin
     # networks:

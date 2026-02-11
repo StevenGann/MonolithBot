@@ -405,6 +405,27 @@ class RegistrationConfig:
 
 
 @dataclass
+class LoggingConfig:
+    """
+    Logging configuration settings.
+
+    Controls where logs are written and at what level of detail.
+
+    Attributes:
+        log_directory: Directory for log files. Will be created if it doesn't exist.
+            In Docker, this should be a mounted volume for persistence.
+        log_level: Minimum level to log (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+        log_to_console: Whether to also output logs to stdout/stderr.
+        log_to_file: Whether to write logs to files in log_directory.
+    """
+
+    log_directory: str = "logs"
+    log_level: str = "INFO"
+    log_to_console: bool = True
+    log_to_file: bool = True
+
+
+@dataclass
 class AdditionalLinkConfig:
     """
     A single name/URL pair for the help embed.
@@ -441,6 +462,7 @@ class Config:
         romm: Romm server connection settings for user provisioning.
         registration: Multi-service user registration feature settings.
         additional_links: Optional list of name/URL pairs shown in /help.
+        logging: Logging configuration (directory, level, output targets).
 
     Example:
         >>> config = load_config(Path("config.json"))
@@ -465,6 +487,7 @@ class Config:
     romm: RommConfig
     registration: RegistrationConfig
     additional_links: list[AdditionalLinkConfig]
+    logging: LoggingConfig
 
 
 # =============================================================================
@@ -1350,6 +1373,56 @@ def _build_additional_links_config(json_config: dict[str, Any]) -> list[Addition
     return result
 
 
+def _build_logging_config(json_config: dict[str, Any]) -> LoggingConfig:
+    """
+    Build logging configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        LoggingConfig with log directory, level, and output settings.
+    """
+    logging_json = json_config.get("logging", {})
+    if not isinstance(logging_json, dict):
+        logging_json = {}
+
+    # Environment variable overrides
+    log_directory = (
+        os.environ.get("LOG_DIRECTORY")
+        or logging_json.get("log_directory")
+        or "logs"
+    )
+
+    log_level = (
+        os.environ.get("LOG_LEVEL")
+        or logging_json.get("log_level")
+        or "INFO"
+    )
+
+    # Boolean environment variables
+    log_to_console_env = os.environ.get("LOG_TO_CONSOLE")
+    if log_to_console_env is not None:
+        log_to_console = log_to_console_env.lower() in ("true", "1", "yes")
+    else:
+        log_to_console = logging_json.get("log_to_console", True)
+
+    log_to_file_env = os.environ.get("LOG_TO_FILE")
+    if log_to_file_env is not None:
+        log_to_file = log_to_file_env.lower() in ("true", "1", "yes")
+    else:
+        log_to_file = logging_json.get("log_to_file", True)
+
+    return LoggingConfig(
+        log_directory=log_directory,
+        log_level=log_level.upper(),
+        log_to_console=log_to_console,
+        log_to_file=log_to_file,
+    )
+
+
 # =============================================================================
 # Public API
 # =============================================================================
@@ -1407,6 +1480,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     romm_config = _build_romm_config(json_config)
     registration_config = _build_registration_config(json_config)
     additional_links = _build_additional_links_config(json_config)
+    logging_config = _build_logging_config(json_config)
 
     return Config(
         discord=discord_config,
@@ -1418,4 +1492,5 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         romm=romm_config,
         registration=registration_config,
         additional_links=additional_links,
+        logging=logging_config,
     )

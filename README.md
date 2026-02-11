@@ -247,6 +247,38 @@ You can add custom links to the `/help` command output:
 
 Each service (Jellyfin, Minecraft servers, NextCloud, Navidrome, Organizr, Romm) supports an optional `description` field that is shown in the `/help` command output.
 
+### Logging Settings
+
+Configure how MonolithBot logs events to files and console:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `logging.log_directory` | `logs` | Directory for log files (create a volume mount in Docker) |
+| `logging.log_level` | `INFO` | Minimum level to log (DEBUG, INFO, WARNING, ERROR) |
+| `logging.log_to_console` | `true` | Output logs to stdout |
+| `logging.log_to_file` | `true` | Write logs to timestamped files |
+
+**Log Files:**
+- New log file created on each bot startup
+- Automatic rotation at midnight (timezone-aware)
+- Filename format: `MonolithBot.YYYY-MM-DD.HH-MM-SS.log`
+
+**Log Format:**
+```
+2024-01-15 17:00:00 | INFO     | CORE       | Bot started successfully
+2024-01-15 17:00:05 | INFO     | JELLYFIN   | Health check: server online
+2024-01-15 17:01:00 | INFO     | REGISTER   | Registration request from user 154789
+```
+
+**Tags:**
+- `CORE` - Bot startup, shutdown, main events
+- `JELLYFIN` - Jellyfin health, announcements, suggestions
+- `MINECRAFT` - Minecraft health, player events
+- `REGISTER` - User registration flow
+- `NEXTCLOUD`, `NAVIDROME`, `ORGANIZR`, `ROMM` - Service-specific events
+- `DISCORD` - Discord.py library events
+- `SCHEDULER` - APScheduler job events
+
 ### Example Configuration
 
 ```json

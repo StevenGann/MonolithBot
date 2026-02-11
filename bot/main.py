@@ -553,33 +553,60 @@ class MonolithBot(commands.Bot):
         await self.close()
 
 
-def setup_logging(verbose: bool = False) -> None:
+def setup_logging(config: Optional[Config] = None, verbose: bool = False) -> Optional[Path]:
     """
     Configure the logging system for the bot.
 
-    Sets up a consistent log format and configures log levels for both
-    MonolithBot and third-party libraries.
+    Sets up file-based logging with daily rotation and console output.
+    Uses the new logging service for structured log output with tags.
 
     Args:
-        verbose: If True, set log level to DEBUG for detailed output.
-            If False (default), set to INFO for standard operation.
+        config: Configuration object containing logging settings.
+            If None, falls back to basic console logging.
+        verbose: If True, override log level to DEBUG for detailed output.
+            If False (default), use level from config or INFO.
+
+    Returns:
+        Path to the log file if file logging is enabled, None otherwise.
 
     Log Format:
-        "2024-01-15 17:00:00 | INFO     | monolithbot | Message"
-    """
-    level = logging.DEBUG if verbose else logging.INFO
+        "2024-01-15 17:00:00 | INFO     | CORE       | Message"
 
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    Log Files:
+        Created in config.logging.log_directory with naming format:
+        MonolithBot.YYYY-MM-DD.HH-MM-SS.log
+    """
+    from bot.services.logging_service import setup_file_logging
+
+    # Determine settings from config or use defaults
+    if config is not None:
+        log_dir = config.logging.log_directory
+        log_level = "DEBUG" if verbose else config.logging.log_level
+        log_to_console = config.logging.log_to_console
+        log_to_file = config.logging.log_to_file
+        # Use Jellyfin schedule timezone if available, else UTC
+        timezone = (
+            config.jellyfin.schedule.timezone
+            if config.jellyfin.enabled
+            else "UTC"
+        )
+    else:
+        # Fallback for basic logging before config is loaded
+        log_dir = "logs"
+        log_level = "DEBUG" if verbose else "INFO"
+        log_to_console = True
+        log_to_file = False  # Don't create files without proper config
+        timezone = "UTC"
+
+    log_path = setup_file_logging(
+        log_dir=log_dir,
+        timezone=timezone,
+        level=log_level,
+        log_to_console=log_to_console,
+        log_to_file=log_to_file,
     )
 
-    # Reduce noise from third-party libraries
-    logging.getLogger("discord").setLevel(logging.WARNING)
-    logging.getLogger("discord.http").setLevel(logging.WARNING)
-    logging.getLogger("aiohttp").setLevel(logging.WARNING)
-    logging.getLogger("apscheduler").setLevel(logging.INFO)
+    return log_path
 
 
 def parse_args() -> argparse.Namespace:
@@ -769,8 +796,8 @@ def main() -> NoReturn | None:
 
     Orchestrates the startup sequence:
     1. Parse command-line arguments
-    2. Configure logging
-    3. Load and validate configuration
+    2. Load and validate configuration
+    3. Configure logging with config settings
     4. Build test modes from arguments
     5. Start the bot
 
@@ -778,7 +805,9 @@ def main() -> NoReturn | None:
         None on successful shutdown, or exits with code 1 on error.
     """
     args = parse_args()
-    setup_logging(args.verbose)
+
+    # Setup basic console logging first to capture config loading errors
+    setup_logging(config=None, verbose=args.verbose)
 
     logger.info("Starting MonolithBot...")
     logger.info(f"Using config file: {args.config.absolute()}")
@@ -789,6 +818,11 @@ def main() -> NoReturn | None:
     except ConfigurationError as e:
         logger.error(f"Configuration error: {e}")
         sys.exit(1)
+
+    # Now reconfigure logging with full config (file logging, timezone, etc.)
+    log_path = setup_logging(config=config, verbose=args.verbose)
+    if log_path:
+        logger.info(f"Logging to file: {log_path}")
 
     # Log configuration summary (excluding sensitive values)
     logger.info(f"Jellyfin enabled: {config.jellyfin.enabled}")

@@ -67,7 +67,8 @@ MonolithBot/
 │       ├── registration.py           # Multi-service registration orchestrator
 │       ├── password_utils.py         # Secure password generation
 │       ├── user_registry.py          # Discord→service account mapping storage
-│       └── scheduler.py              # APScheduler factory and utilities
+│       ├── scheduler.py              # APScheduler factory and utilities
+│       └── logging_service.py        # File-based logging with rotation
 ├── tests/                            # Test suite
 │   ├── conftest.py                   # Shared pytest fixtures
 │   ├── test_config.py                # Configuration tests
