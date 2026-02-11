@@ -150,6 +150,7 @@ Each external service follows a consistent pattern:
 | `navidrome.py` | Music server: user creation, existence check |
 | `nextcloud.py` | File sync: user creation via OCS API |
 | `romm.py` | ROM manager: user creation |
+| `organizr.py` | Services dashboard: user creation |
 | `registration.py` | Orchestrates multi-service registration, password generation, result aggregation |
 | `password_utils.py` | Cryptographically secure password generation |
 | `user_registry.py` | JSON persistence for Discord ID → username/email mappings |
@@ -585,7 +586,7 @@ on:
 
 ### Coverage Requirements
 
-The project has a minimum coverage threshold of 60% configured in `pyproject.toml`. Current coverage is ~69%.
+The project has a minimum coverage threshold of 60% configured in `pyproject.toml`. The test suite includes 500+ tests.
 
 ---
 

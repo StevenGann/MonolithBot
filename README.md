@@ -20,14 +20,15 @@ A Discord bot for monitoring your Jellyfin media server and Minecraft game serve
 
 ### Multi-Service User Registration
 - **🔐 One-Click Registration**: New users can DM the bot to register on all your services at once
-- **🌐 Supported Services**: Jellyfin, NextCloud, Navidrome, and Romm
+- **🌐 Supported Services**: Jellyfin, NextCloud, Navidrome, Organizr, and Romm
 - **🔑 Secure Password Generation**: Cryptographically secure passwords generated and delivered via DM
 - **📋 Per-Service Status**: See exactly which services were registered, skipped, or failed
 - **🎯 Smart Handling**: Gracefully handles users who already exist on some services
+- **🔄 Password Reset**: Reset passwords across all services with a single command
 
 ### General
 - **⚙️ Flexible Configuration**: Configure via JSON file (local) or environment variables (Docker)
-- **✅ Well Tested**: Comprehensive test suite with 330+ tests and CI/CD integration
+- **✅ Well Tested**: Comprehensive test suite with 500+ tests and CI/CD integration
 
 ## Quick Start
 
@@ -213,6 +214,14 @@ Each service that users can register on has its own configuration:
 | `navidrome.admin_user` | Admin username for user creation | ✅ if enabled |
 | `navidrome.admin_password` | Admin password | ✅ if enabled |
 
+**Organizr:**
+| Setting | Description | Required |
+|---------|-------------|----------|
+| `organizr.enabled` | Enable/disable Organizr registration | ❌ |
+| `organizr.urls` | List of Organizr server URLs | ✅ if enabled |
+| `organizr.admin_user` | Admin username for user creation | ✅ if enabled |
+| `organizr.admin_password` | Admin password | ✅ if enabled |
+
 **Romm:**
 | Setting | Description | Required |
 |---------|-------------|----------|
@@ -222,6 +231,21 @@ Each service that users can register on has its own configuration:
 | `romm.admin_password` | Admin password | ✅ if enabled |
 
 **Note:** Jellyfin uses the existing `jellyfin` configuration for registration.
+
+### Additional Links Settings
+
+You can add custom links to the `/help` command output:
+
+| Setting | Description | Required |
+|---------|-------------|----------|
+| `additional_links` | Array of link objects to display in /help | ❌ |
+| `additional_links[].name` | Display name for the link | ✅ |
+| `additional_links[].url` | Full URL | ✅ |
+| `additional_links[].description` | Optional description shown next to the link | ❌ |
+
+### Service Descriptions
+
+Each service (Jellyfin, Minecraft servers, NextCloud, Navidrome, Organizr, Romm) supports an optional `description` field that is shown in the `/help` command output.
 
 ### Example Configuration
 
@@ -276,15 +300,30 @@ Each service that users can register on has its own configuration:
     "admin_user": "admin",
     "admin_password": "YOUR_ADMIN_PASSWORD"
   },
+  "organizr": {
+    "enabled": true,
+    "urls": ["https://organizr.example.com"],
+    "admin_user": "admin",
+    "admin_password": "YOUR_ADMIN_PASSWORD",
+    "description": "Services dashboard"
+  },
   "romm": {
     "enabled": true,
     "urls": ["https://romm.example.com"],
     "admin_user": "admin",
-    "admin_password": "YOUR_ADMIN_PASSWORD"
+    "admin_password": "YOUR_ADMIN_PASSWORD",
+    "description": "ROM library manager"
   },
   "registration": {
     "enabled": true
-  }
+  },
+  "additional_links": [
+    {
+      "name": "Wiki",
+      "url": "https://wiki.example.com",
+      "description": "Documentation and guides"
+    }
+  ]
 }
 ```
 
@@ -381,6 +420,10 @@ For Docker deployment, use these environment variables:
 | `ROMM_URL` | `romm.urls` (single or comma-separated) |
 | `ROMM_ADMIN_USER` | `romm.admin_user` |
 | `ROMM_ADMIN_PASSWORD` | `romm.admin_password` |
+| `ORGANIZR_ENABLED` | `organizr.enabled` |
+| `ORGANIZR_URL` | `organizr.urls` (single or comma-separated) |
+| `ORGANIZR_ADMIN_USER` | `organizr.admin_user` |
+| `ORGANIZR_ADMIN_PASSWORD` | `organizr.admin_password` |
 
 ## Bot Commands
 
@@ -399,12 +442,20 @@ For Docker deployment, use these environment variables:
 | `/mc-status` | Check all Minecraft server status | Everyone |
 | `/mc-players` | Show who's playing on each server | Everyone |
 
+### General Commands
+
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/help` | Show available services and links | Everyone |
+
 ### Registration Commands
 
 | Command | Description | Permission |
 |---------|-------------|------------|
 | `/register` | Register on all enabled services (DM only) | Everyone |
+| `/reset-password` | Reset password on all services (DM only) | Everyone |
 | DM: `register <username> <email>` | Alternative text-based registration | Everyone |
+| DM: `reset-password` | Alternative text-based password reset | Everyone |
 
 **Registration Usage:**
 
@@ -422,6 +473,13 @@ For Docker deployment, use these environment variables:
 - Services where you already had an account (skipped)
 - Any services that failed (with error details)
 - Your generated password (shown as a spoiler for security)
+
+**Password Reset:**
+
+If you've forgotten your password, you can reset it across all services:
+1. DM the bot with `/reset-password` or type `reset-password`
+2. A new password will be generated and set on all services where you have an account
+3. You'll receive the new password via DM
 
 ## Development
 
@@ -564,6 +622,7 @@ Tests run automatically on every push and pull request via GitHub Actions. The C
 - For NextCloud: Ensure the admin user has user provisioning rights
 - For Navidrome: Admin user must have admin role
 - For Romm: Admin credentials must be valid OAuth2 credentials
+- For Organizr: Admin user must have user management permissions
 
 **User already exists:**
 - This is expected behavior - the bot skips services where the username already exists

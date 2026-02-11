@@ -2,7 +2,7 @@
 Registration DM handler cog for MonolithBot.
 
 This cog handles direct message interactions for user registration across
-multiple services (Jellyfin, NextCloud, Navidrome, Romm).
+multiple services (Jellyfin, NextCloud, Navidrome, Organizr, Romm).
 
 Key Features:
     - DM-based registration flow
@@ -10,6 +10,7 @@ Key Features:
     - Rich embed responses with registration results
     - Password delivered securely via DM only
     - Persistent tracking of Discord user to service account mappings
+    - Password reset functionality
 
 Usage Flow:
     1. User DMs the bot: "register myusername myemail@example.com"
@@ -20,10 +21,12 @@ Usage Flow:
 Commands:
     - register <username> <email>: Register on all services
     - /register: Slash command version
+    - reset-password: Reset password on all services
+    - /reset-password: Slash command version
 
 Configuration:
     Requires `registration.enabled = true` in config.
-    At least one service (Jellyfin, NextCloud, Navidrome, Romm) must be enabled.
+    At least one service (Jellyfin, NextCloud, Navidrome, Organizr, Romm) must be enabled.
 
 See Also:
     - bot.services.registration: Registration orchestrator
