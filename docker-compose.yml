@@ -3,12 +3,12 @@ services:
     image: ghcr.io/stevengann/monolithbot:latest
     container_name: monolithbot
     restart: unless-stopped
-    # Mount config.json and logs directory from host
-    # All configuration is read from config.json
-    # Environment variables can optionally override JSON values if needed
+    # Mount config.json, logs, and data directory from host
+    # data/ holds user_registry.json (registrations) and admin-login.json (Admin UI)
     volumes:
       - /mnt/App-Storage/Container-Data/monolithbot/config/config.json:/app/config.json:ro
       - /mnt/App-Storage/Container-Data/monolithbot/logs:/app/logs
+      - /mnt/App-Storage/Container-Data/monolithbot/data:/app/data
     # Admin UI (when admin_ui.enabled in config). Use host 0.0.0.0 in config to reach from host.
     ports:
       - "5050:5050"

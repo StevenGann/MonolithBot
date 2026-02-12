@@ -45,6 +45,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from bot.services.password_utils import generate_password
+from bot.services.organizr import OrganizrUserExistsError
 
 # Module logger
 logger = logging.getLogger("monolithbot.registration")
@@ -562,6 +563,14 @@ class RegistrationService:
                 message="Account created successfully",
             )
 
+        except OrganizrUserExistsError as e:
+            logger.info(f"Organizr: User {username} already exists ({e})")
+            return ServiceResult(
+                service_name="Organizr",
+                success=True,
+                message="Account already exists",
+                already_existed=True,
+            )
         except Exception as e:
             logger.error(f"Organizr: Failed to create user {username}: {e}")
             return ServiceResult(

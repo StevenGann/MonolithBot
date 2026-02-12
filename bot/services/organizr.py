@@ -175,7 +175,17 @@ class OrganizrClient:
     ) -> dict[str, Any] | list[Any]:
         if response.status >= 400:
             text = await response.text()
-            if "already exists" in text.lower() or "duplicate" in text.lower():
+            # Organizr returns 409 Conflict when username/email is already taken.
+            # Treat this as a non-fatal "already exists" condition so registration
+            # can report it gracefully.
+            if response.status == 409:
+                raise OrganizrUserExistsError(text)
+            if (
+                "already exists" in text.lower()
+                or "duplicate" in text.lower()
+                or "already taken" in text.lower()
+                or "is already taken" in text.lower()
+            ):
                 raise OrganizrUserExistsError("User already exists")
             raise OrganizrError(f"API error {response.status}: {text}")
         if response.content_type != "application/json":
