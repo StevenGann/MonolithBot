@@ -25,7 +25,9 @@ SESSION_TTL_SECONDS = 24 * 3600  # 24 hours
 
 
 def _hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode(
+        "utf-8"
+    )
 
 
 def _verify_password(password: str, hash_str: str) -> bool:
@@ -100,10 +102,12 @@ def verify_login(login_file_path: str, username: str, password: str) -> Optional
         data.setdefault("admins", [])
         if not isinstance(data["admins"], list):
             data["admins"] = []
-        data["admins"].append({
-            "username": raw_username,
-            "password_hash": _hash_password(password),
-        })
+        data["admins"].append(
+            {
+                "username": raw_username,
+                "password_hash": _hash_password(password),
+            }
+        )
         _save_json(path, data)
         logger.info(f"Admin UI: new admin claimed account {raw_username!r}")
         return raw_username
@@ -112,7 +116,11 @@ def verify_login(login_file_path: str, username: str, password: str) -> Optional
     initial = data.get("initial_admin")
     if isinstance(initial, dict):
         u = initial.get("username")
-        if u and u == raw_username and _verify_password(password, initial.get("password_hash", "")):
+        if (
+            u
+            and u == raw_username
+            and _verify_password(password, initial.get("password_hash", ""))
+        ):
             return raw_username
 
     # Other admins
@@ -134,7 +142,9 @@ def is_initial_admin(login_file_path: str, username: str) -> bool:
     return False
 
 
-def add_pending_admin(login_file_path: str, username: str, by_username: str) -> tuple[bool, str]:
+def add_pending_admin(
+    login_file_path: str, username: str, by_username: str
+) -> tuple[bool, str]:
     """
     Add a username to pending_usernames. Only the initial admin can do this.
     Returns (success, message).

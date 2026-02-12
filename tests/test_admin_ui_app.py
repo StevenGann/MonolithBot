@@ -74,13 +74,17 @@ def test_get_index_returns_login_page_when_not_logged_in(app_with_config) -> Non
     _run(run())
 
 
-def test_get_index_redirects_to_dashboard_when_logged_in(app_with_config, login_file_path: str) -> None:
+def test_get_index_redirects_to_dashboard_when_logged_in(
+    app_with_config, login_file_path: str
+) -> None:
     auth.first_login_setup(login_file_path, "admin", "secret")
 
     async def run() -> None:
         async with TestServer(app_with_config) as server:
             async with TestClient(server) as client:
-                await client.post("/admin/login", data={"username": "admin", "password": "secret"})
+                await client.post(
+                    "/admin/login", data={"username": "admin", "password": "secret"}
+                )
                 resp = await client.get("/admin/", allow_redirects=False)
                 assert resp.status == 302
                 assert resp.headers.get("Location") == "/admin/dashboard"
@@ -89,13 +93,19 @@ def test_get_index_redirects_to_dashboard_when_logged_in(app_with_config, login_
     _run(run())
 
 
-def test_post_login_creates_file_on_first_login(app_with_config, login_file_path: str) -> None:
+def test_post_login_creates_file_on_first_login(
+    app_with_config, login_file_path: str
+) -> None:
     assert not Path(login_file_path).exists()
 
     async def run() -> None:
         async with TestServer(app_with_config) as server:
             async with TestClient(server) as client:
-                resp = await client.post("/admin/login", data={"username": "firstadmin", "password": "firstpass"}, allow_redirects=False)
+                resp = await client.post(
+                    "/admin/login",
+                    data={"username": "firstadmin", "password": "firstpass"},
+                    allow_redirects=False,
+                )
                 assert resp.status == 302
                 assert resp.headers.get("Location") == "/admin/dashboard"
                 assert auth.SESSION_COOKIE_NAME in resp.cookies
@@ -105,13 +115,17 @@ def test_post_login_creates_file_on_first_login(app_with_config, login_file_path
     assert Path(login_file_path).exists()
 
 
-def test_post_login_invalid_password_shows_error(app_with_config, login_file_path: str) -> None:
+def test_post_login_invalid_password_shows_error(
+    app_with_config, login_file_path: str
+) -> None:
     auth.first_login_setup(login_file_path, "admin", "correct")
 
     async def run() -> None:
         async with TestServer(app_with_config) as server:
             async with TestClient(server) as client:
-                resp = await client.post("/admin/login", data={"username": "admin", "password": "wrong"})
+                resp = await client.post(
+                    "/admin/login", data={"username": "admin", "password": "wrong"}
+                )
                 assert resp.status == 200
                 text = await resp.text()
         assert "Invalid" in text or "error" in text.lower()
@@ -119,13 +133,19 @@ def test_post_login_invalid_password_shows_error(app_with_config, login_file_pat
     _run(run())
 
 
-def test_post_login_valid_redirects_and_sets_cookie(app_with_config, login_file_path: str) -> None:
+def test_post_login_valid_redirects_and_sets_cookie(
+    app_with_config, login_file_path: str
+) -> None:
     auth.first_login_setup(login_file_path, "admin", "secret")
 
     async def run() -> None:
         async with TestServer(app_with_config) as server:
             async with TestClient(server) as client:
-                resp = await client.post("/admin/login", data={"username": "admin", "password": "secret"}, allow_redirects=False)
+                resp = await client.post(
+                    "/admin/login",
+                    data={"username": "admin", "password": "secret"},
+                    allow_redirects=False,
+                )
                 assert resp.status == 302
                 assert resp.headers.get("Location") == "/admin/dashboard"
                 assert auth.SESSION_COOKIE_NAME in resp.cookies
@@ -134,18 +154,24 @@ def test_post_login_valid_redirects_and_sets_cookie(app_with_config, login_file_
     _run(run())
 
 
-def test_get_logout_clears_cookie_and_redirects(app_with_config, login_file_path: str) -> None:
+def test_get_logout_clears_cookie_and_redirects(
+    app_with_config, login_file_path: str
+) -> None:
     auth.first_login_setup(login_file_path, "admin", "secret")
 
     async def run() -> None:
         async with TestServer(app_with_config) as server:
             async with TestClient(server) as client:
-                await client.post("/admin/login", data={"username": "admin", "password": "secret"})
+                await client.post(
+                    "/admin/login", data={"username": "admin", "password": "secret"}
+                )
                 resp = await client.get("/admin/logout", allow_redirects=False)
                 assert resp.status == 302
                 assert resp.headers.get("Location") == "/admin/"
                 set_cookie = resp.headers.get("Set-Cookie", "")
-                assert "admin_session" in set_cookie and ("0" in set_cookie or "delete" in set_cookie.lower())
+                assert "admin_session" in set_cookie and (
+                    "0" in set_cookie or "delete" in set_cookie.lower()
+                )
                 await resp.release()
 
     _run(run())
@@ -163,13 +189,17 @@ def test_get_dashboard_without_session_redirects_to_index(app_with_config) -> No
     _run(run())
 
 
-def test_get_dashboard_with_session_returns_200(app_with_config, login_file_path: str) -> None:
+def test_get_dashboard_with_session_returns_200(
+    app_with_config, login_file_path: str
+) -> None:
     auth.first_login_setup(login_file_path, "admin", "secret")
 
     async def run() -> None:
         async with TestServer(app_with_config) as server:
             async with TestClient(server) as client:
-                await client.post("/admin/login", data={"username": "admin", "password": "secret"})
+                await client.post(
+                    "/admin/login", data={"username": "admin", "password": "secret"}
+                )
                 resp = await client.get("/admin/dashboard")
                 assert resp.status == 200
                 text = await resp.text()
@@ -179,13 +209,17 @@ def test_get_dashboard_with_session_returns_200(app_with_config, login_file_path
     _run(run())
 
 
-def test_get_admin_without_trailing_slash_redirects_when_logged_in(app_with_config, login_file_path: str) -> None:
+def test_get_admin_without_trailing_slash_redirects_when_logged_in(
+    app_with_config, login_file_path: str
+) -> None:
     auth.first_login_setup(login_file_path, "admin", "secret")
 
     async def run() -> None:
         async with TestServer(app_with_config) as server:
             async with TestClient(server) as client:
-                await client.post("/admin/login", data={"username": "admin", "password": "secret"})
+                await client.post(
+                    "/admin/login", data={"username": "admin", "password": "secret"}
+                )
                 resp = await client.get("/admin", allow_redirects=False)
                 assert resp.status == 302
                 assert resp.headers.get("Location") == "/admin/dashboard"

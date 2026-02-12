@@ -1046,7 +1046,9 @@ def _build_nextcloud_config(json_config: dict[str, Any]) -> NextCloudConfig:
         else:
             url_from_json = nextcloud_json.get("url")
             if url_from_json:
-                urls = [url_from_json] if isinstance(url_from_json, str) else url_from_json
+                urls = (
+                    [url_from_json] if isinstance(url_from_json, str) else url_from_json
+                )
             else:
                 urls = []
 
@@ -1057,9 +1059,11 @@ def _build_nextcloud_config(json_config: dict[str, Any]) -> NextCloudConfig:
         )
 
     # Admin credentials
-    admin_user = _get_env("NEXTCLOUD_ADMIN_USER") or nextcloud_json.get("admin_user", "")
-    admin_password = (
-        _get_env("NEXTCLOUD_ADMIN_PASSWORD") or nextcloud_json.get("admin_password", "")
+    admin_user = _get_env("NEXTCLOUD_ADMIN_USER") or nextcloud_json.get(
+        "admin_user", ""
+    )
+    admin_password = _get_env("NEXTCLOUD_ADMIN_PASSWORD") or nextcloud_json.get(
+        "admin_password", ""
     )
 
     if enabled and (not admin_user or not admin_password):
@@ -1125,7 +1129,9 @@ def _build_navidrome_config(json_config: dict[str, Any]) -> NavidromeConfig:
         else:
             url_from_json = navidrome_json.get("url")
             if url_from_json:
-                urls = [url_from_json] if isinstance(url_from_json, str) else url_from_json
+                urls = (
+                    [url_from_json] if isinstance(url_from_json, str) else url_from_json
+                )
             else:
                 urls = []
 
@@ -1136,9 +1142,11 @@ def _build_navidrome_config(json_config: dict[str, Any]) -> NavidromeConfig:
         )
 
     # Admin credentials
-    admin_user = _get_env("NAVIDROME_ADMIN_USER") or navidrome_json.get("admin_user", "")
-    admin_password = (
-        _get_env("NAVIDROME_ADMIN_PASSWORD") or navidrome_json.get("admin_password", "")
+    admin_user = _get_env("NAVIDROME_ADMIN_USER") or navidrome_json.get(
+        "admin_user", ""
+    )
+    admin_password = _get_env("NAVIDROME_ADMIN_PASSWORD") or navidrome_json.get(
+        "admin_password", ""
     )
 
     if enabled and (not admin_user or not admin_password):
@@ -1186,9 +1194,7 @@ def _build_organizr_config(json_config: dict[str, Any]) -> OrganizrConfig:
 
     enabled_env = _get_env_bool("ORGANIZR_ENABLED")
     enabled = (
-        enabled_env
-        if enabled_env is not None
-        else organizr_json.get("enabled", False)
+        enabled_env if enabled_env is not None else organizr_json.get("enabled", False)
     )
 
     urls_from_env = _get_env_list("ORGANIZR_URL")
@@ -1205,9 +1211,7 @@ def _build_organizr_config(json_config: dict[str, Any]) -> OrganizrConfig:
             url_from_json = organizr_json.get("url")
             if url_from_json:
                 urls = (
-                    [url_from_json]
-                    if isinstance(url_from_json, str)
-                    else url_from_json
+                    [url_from_json] if isinstance(url_from_json, str) else url_from_json
                 )
             else:
                 urls = []
@@ -1218,9 +1222,7 @@ def _build_organizr_config(json_config: dict[str, Any]) -> OrganizrConfig:
             "variable or 'organizr.url'/'organizr.urls' in config.json"
         )
 
-    admin_user = _get_env("ORGANIZR_ADMIN_USER") or organizr_json.get(
-        "admin_user", ""
-    )
+    admin_user = _get_env("ORGANIZR_ADMIN_USER") or organizr_json.get("admin_user", "")
     admin_password = _get_env("ORGANIZR_ADMIN_PASSWORD") or organizr_json.get(
         "admin_password", ""
     )
@@ -1270,7 +1272,9 @@ def _build_romm_config(json_config: dict[str, Any]) -> RommConfig:
 
     # Check if enabled (defaults to False)
     enabled_env = _get_env_bool("ROMM_ENABLED")
-    enabled = enabled_env if enabled_env is not None else romm_json.get("enabled", False)
+    enabled = (
+        enabled_env if enabled_env is not None else romm_json.get("enabled", False)
+    )
 
     # URLs: env var takes precedence, supports comma-separated list
     urls_from_env = _get_env_list("ROMM_URL")
@@ -1286,7 +1290,9 @@ def _build_romm_config(json_config: dict[str, Any]) -> RommConfig:
         else:
             url_from_json = romm_json.get("url")
             if url_from_json:
-                urls = [url_from_json] if isinstance(url_from_json, str) else url_from_json
+                urls = (
+                    [url_from_json] if isinstance(url_from_json, str) else url_from_json
+                )
             else:
                 urls = []
 
@@ -1298,7 +1304,9 @@ def _build_romm_config(json_config: dict[str, Any]) -> RommConfig:
 
     # Admin credentials
     admin_user = _get_env("ROMM_ADMIN_USER") or romm_json.get("admin_user", "")
-    admin_password = _get_env("ROMM_ADMIN_PASSWORD") or romm_json.get("admin_password", "")
+    admin_password = _get_env("ROMM_ADMIN_PASSWORD") or romm_json.get(
+        "admin_password", ""
+    )
 
     if enabled and (not admin_user or not admin_password):
         raise ConfigurationError(
@@ -1346,9 +1354,8 @@ def _build_registration_config(json_config: dict[str, Any]) -> RegistrationConfi
     )
 
     # Registry file path
-    registry_file = (
-        os.getenv("REGISTRATION_REGISTRY_FILE")
-        or registration_json.get("registry_file", "data/user_registry.json")
+    registry_file = os.getenv("REGISTRATION_REGISTRY_FILE") or registration_json.get(
+        "registry_file", "data/user_registry.json"
     )
 
     return RegistrationConfig(enabled=enabled, registry_file=registry_file)
@@ -1373,9 +1380,8 @@ def _build_admin_ui_config(json_config: dict[str, Any]) -> AdminUIConfig:
     if port is None:
         port = admin_json.get("port", 5050)
 
-    admin_login_file = (
-        os.environ.get("ADMIN_UI_LOGIN_FILE")
-        or admin_json.get("admin_login_file", "data/admin-login.json")
+    admin_login_file = os.environ.get("ADMIN_UI_LOGIN_FILE") or admin_json.get(
+        "admin_login_file", "data/admin-login.json"
     )
 
     return AdminUIConfig(
@@ -1386,7 +1392,9 @@ def _build_admin_ui_config(json_config: dict[str, Any]) -> AdminUIConfig:
     )
 
 
-def _build_additional_links_config(json_config: dict[str, Any]) -> list[AdditionalLinkConfig]:
+def _build_additional_links_config(
+    json_config: dict[str, Any],
+) -> list[AdditionalLinkConfig]:
     """
     Build the list of additional name/URL links from JSON.
 
@@ -1408,7 +1416,14 @@ def _build_additional_links_config(json_config: dict[str, Any]) -> list[Addition
             continue
         name = item.get("name")
         url = item.get("url")
-        if name is not None and url is not None and isinstance(name, str) and isinstance(url, str) and name.strip() and url.strip():
+        if (
+            name is not None
+            and url is not None
+            and isinstance(name, str)
+            and isinstance(url, str)
+            and name.strip()
+            and url.strip()
+        ):
             desc = item.get("description")
             description = desc.strip() if isinstance(desc, str) and desc else ""
             result.append(
@@ -1439,16 +1454,10 @@ def _build_logging_config(json_config: dict[str, Any]) -> LoggingConfig:
 
     # Environment variable overrides
     log_directory = (
-        os.environ.get("LOG_DIRECTORY")
-        or logging_json.get("log_directory")
-        or "logs"
+        os.environ.get("LOG_DIRECTORY") or logging_json.get("log_directory") or "logs"
     )
 
-    log_level = (
-        os.environ.get("LOG_LEVEL")
-        or logging_json.get("log_level")
-        or "INFO"
-    )
+    log_level = os.environ.get("LOG_LEVEL") or logging_json.get("log_level") or "INFO"
 
     # Boolean environment variables
     log_to_console_env = os.environ.get("LOG_TO_CONSOLE")

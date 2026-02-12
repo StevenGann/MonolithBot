@@ -42,6 +42,7 @@ See Also:
     - NextCloud OCS API: https://docs.nextcloud.com/server/latest/admin_manual/
     - bot.cogs.registration.handler: Uses this service for user registration
 """
+
 from __future__ import annotations
 
 import logging
@@ -184,9 +185,7 @@ class NextCloudClient:
         ...     await client.close()
     """
 
-    def __init__(
-        self, base_url: str, admin_user: str, admin_password: str
-    ) -> None:
+    def __init__(self, base_url: str, admin_user: str, admin_password: str) -> None:
         """
         Initialize the NextCloud client.
 
@@ -548,9 +547,7 @@ class NextCloudService:
         - bot.config.NextCloudConfig: Configuration with URL list.
     """
 
-    def __init__(
-        self, urls: list[str], admin_user: str, admin_password: str
-    ) -> None:
+    def __init__(self, urls: list[str], admin_user: str, admin_password: str) -> None:
         """
         Initialize the NextCloud service.
 

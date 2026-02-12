@@ -42,6 +42,7 @@ See Also:
     - bot.services.jellyfin: The API client used for health checks
     - bot.cogs.jellyfin.announcements: Companion cog for content announcements
 """
+
 from __future__ import annotations
 
 import logging

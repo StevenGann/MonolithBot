@@ -13,6 +13,7 @@ Endpoints used:
     - GET /api/v2/users - List users (check existence)
     - POST /api/v2/users - Create user (admin)
 """
+
 from __future__ import annotations
 
 import logging
@@ -79,9 +80,7 @@ class OrganizrClient:
     is used for all requests (aiohttp stores cookies automatically).
     """
 
-    def __init__(
-        self, base_url: str, admin_user: str, admin_password: str
-    ) -> None:
+    def __init__(self, base_url: str, admin_user: str, admin_password: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.admin_user = admin_user
         self.admin_password = admin_password
@@ -117,11 +116,17 @@ class OrganizrClient:
                 if response.status >= 400:
                     text = await response.text()
                     raise OrganizrError(f"Login failed: {response.status} - {text}")
-                data = await response.json() if response.content_type == "application/json" else {}
+                data = (
+                    await response.json()
+                    if response.content_type == "application/json"
+                    else {}
+                )
                 result = data.get("result") if isinstance(data, dict) else None
                 if result == "error":
                     raise OrganizrAuthError(
-                        data.get("message", "Login failed") if isinstance(data, dict) else "Login failed"
+                        data.get("message", "Login failed")
+                        if isinstance(data, dict)
+                        else "Login failed"
                     )
                 self._logged_in = True
                 logger.debug("Successfully authenticated with Organizr")
@@ -186,7 +191,10 @@ class OrganizrClient:
             raw = await self._request("GET", "/api/v2/users")
             users = raw if isinstance(raw, list) else []
             for user in users:
-                if isinstance(user, dict) and user.get("username", "").lower() == username.lower():
+                if (
+                    isinstance(user, dict)
+                    and user.get("username", "").lower() == username.lower()
+                ):
                     return True
             return False
         except OrganizrError:
@@ -223,9 +231,7 @@ class OrganizrService:
     Tries each URL in order; caches the first working URL for subsequent calls.
     """
 
-    def __init__(
-        self, urls: list[str], admin_user: str, admin_password: str
-    ) -> None:
+    def __init__(self, urls: list[str], admin_user: str, admin_password: str) -> None:
         self.urls = [url.rstrip("/") for url in urls]
         self.admin_user = admin_user
         self.admin_password = admin_password

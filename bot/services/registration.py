@@ -36,6 +36,7 @@ See Also:
     - bot.services.romm: Romm user creation
     - bot.cogs.registration.handler: DM handler that uses this service
 """
+
 from __future__ import annotations
 
 import logging
@@ -393,9 +394,7 @@ class RegistrationService:
 
         return result
 
-    async def _register_jellyfin(
-        self, username: str, password: str
-    ) -> ServiceResult:
+    async def _register_jellyfin(self, username: str, password: str) -> ServiceResult:
         """Attempt to register user on Jellyfin."""
         try:
             # Check if user already exists
@@ -744,9 +743,7 @@ class RegistrationService:
                 error=str(e),
             )
 
-    async def _reset_romm_password(
-        self, username: str, password: str
-    ) -> ServiceResult:
+    async def _reset_romm_password(self, username: str, password: str) -> ServiceResult:
         """Attempt to reset password on Romm."""
         try:
             # Check if user exists

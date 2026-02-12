@@ -163,7 +163,10 @@ class TestOrganizrClientCreateUser:
             )
             mocked.post(
                 "http://organizr.local/api/v2/users",
-                payload={"result": "success", "data": {"id": 42, "username": "newuser"}},
+                payload={
+                    "result": "success",
+                    "data": {"id": 42, "username": "newuser"},
+                },
             )
             user = await client.create_user(
                 "newuser", "password123", "newuser@example.com"
@@ -181,7 +184,10 @@ class TestOrganizrClientCreateUser:
             )
             mocked.get(
                 "http://organizr.local/api/v2/users",
-                payload={"result": "success", "data": [{"id": 1, "username": "existing"}]},
+                payload={
+                    "result": "success",
+                    "data": [{"id": 1, "username": "existing"}],
+                },
             )
             with pytest.raises(OrganizrUserExistsError):
                 await client.create_user(

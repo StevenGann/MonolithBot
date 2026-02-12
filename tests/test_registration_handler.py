@@ -111,7 +111,9 @@ def partial_result() -> RegistrationResult:
         password="SecurePass123!",
         services=[
             ServiceResult("Jellyfin", success=True, message="Created"),
-            ServiceResult("NextCloud", success=False, message="Failed", error="Connection timeout"),
+            ServiceResult(
+                "NextCloud", success=False, message="Failed", error="Connection timeout"
+            ),
         ],
     )
 
@@ -124,7 +126,9 @@ def already_exists_result() -> RegistrationResult:
         email="test@example.com",
         password="SecurePass123!",
         services=[
-            ServiceResult("Jellyfin", success=True, message="Exists", already_existed=True),
+            ServiceResult(
+                "Jellyfin", success=True, message="Exists", already_existed=True
+            ),
             ServiceResult("NextCloud", success=True, message="Created"),
         ],
     )
@@ -138,8 +142,12 @@ def failed_result() -> RegistrationResult:
         email="test@example.com",
         password="SecurePass123!",
         services=[
-            ServiceResult("Jellyfin", success=False, message="Failed", error="Server error"),
-            ServiceResult("NextCloud", success=False, message="Failed", error="Auth failed"),
+            ServiceResult(
+                "Jellyfin", success=False, message="Failed", error="Server error"
+            ),
+            ServiceResult(
+                "NextCloud", success=False, message="Failed", error="Auth failed"
+            ),
         ],
     )
 
@@ -152,7 +160,9 @@ def failed_result() -> RegistrationResult:
 class TestRegistrationCogInit:
     """Tests for RegistrationCog initialization."""
 
-    def test_init_stores_bot_reference(self, cog: RegistrationCog, mock_bot: MagicMock) -> None:
+    def test_init_stores_bot_reference(
+        self, cog: RegistrationCog, mock_bot: MagicMock
+    ) -> None:
         """Test that __init__ stores the bot reference."""
         assert cog.bot == mock_bot
 
@@ -197,7 +207,9 @@ class TestRegistrationCogUnload:
     """Tests for RegistrationCog cog_unload."""
 
     @pytest.mark.asyncio
-    async def test_cog_unload_clears_registration_service(self, cog: RegistrationCog) -> None:
+    async def test_cog_unload_clears_registration_service(
+        self, cog: RegistrationCog
+    ) -> None:
         """Test that cog_unload clears the registration service."""
         await cog.cog_load()
         assert cog.registration_service is not None
@@ -370,11 +382,16 @@ class TestOnMessageRegistration:
 
     @pytest.mark.asyncio
     async def test_successful_registration_sends_result_embed(
-        self, cog: RegistrationCog, mock_dm_message: MagicMock, successful_result: RegistrationResult
+        self,
+        cog: RegistrationCog,
+        mock_dm_message: MagicMock,
+        successful_result: RegistrationResult,
     ) -> None:
         """Test that successful registration sends result embed."""
         await cog.cog_load()
-        cog.registration_service.register_user = AsyncMock(return_value=successful_result)
+        cog.registration_service.register_user = AsyncMock(
+            return_value=successful_result
+        )
 
         await cog.on_message(mock_dm_message)
 
@@ -420,7 +437,9 @@ class TestRegisterSlashCommand:
         mock_interaction.response.send_message = AsyncMock()
 
         # Call the callback directly
-        await cog.register_command.callback(cog, mock_interaction, "testuser", "test@example.com")
+        await cog.register_command.callback(
+            cog, mock_interaction, "testuser", "test@example.com"
+        )
 
         mock_interaction.response.send_message.assert_called_once()
         call_args = mock_interaction.response.send_message.call_args
@@ -433,7 +452,9 @@ class TestRegisterSlashCommand:
         """Test that non-DM usage redirects user to DM."""
         mock_interaction.channel = MagicMock(spec=discord.TextChannel)  # Not a DM
 
-        await cog.register_command.callback(cog, mock_interaction, "testuser", "test@example.com")
+        await cog.register_command.callback(
+            cog, mock_interaction, "testuser", "test@example.com"
+        )
 
         mock_interaction.response.defer.assert_called_once()
         mock_interaction.followup.send.assert_called_once()
@@ -442,13 +463,20 @@ class TestRegisterSlashCommand:
 
     @pytest.mark.asyncio
     async def test_dm_processes_registration(
-        self, cog: RegistrationCog, mock_interaction: MagicMock, successful_result: RegistrationResult
+        self,
+        cog: RegistrationCog,
+        mock_interaction: MagicMock,
+        successful_result: RegistrationResult,
     ) -> None:
         """Test that DM interaction processes registration."""
         await cog.cog_load()
-        cog.registration_service.register_user = AsyncMock(return_value=successful_result)
+        cog.registration_service.register_user = AsyncMock(
+            return_value=successful_result
+        )
 
-        await cog.register_command.callback(cog, mock_interaction, "testuser", "test@example.com")
+        await cog.register_command.callback(
+            cog, mock_interaction, "testuser", "test@example.com"
+        )
 
         mock_interaction.response.defer.assert_called_once()
         cog.registration_service.register_user.assert_called_once()
@@ -461,7 +489,9 @@ class TestRegisterSlashCommand:
         """Test validation error handling in slash command."""
         await cog.cog_load()
 
-        await cog.register_command.callback(cog, mock_interaction, "ab", "test@example.com")  # Too short
+        await cog.register_command.callback(
+            cog, mock_interaction, "ab", "test@example.com"
+        )  # Too short
 
         mock_interaction.followup.send.assert_called_once()
         call_args = mock_interaction.followup.send.call_args
@@ -641,14 +671,14 @@ class TestCreateHelpEmbed:
         assert example_field is not None
 
     @pytest.mark.asyncio
-    async def test_help_embed_shows_available_services(self, cog: RegistrationCog) -> None:
+    async def test_help_embed_shows_available_services(
+        self, cog: RegistrationCog
+    ) -> None:
         """Test that help embed shows available services."""
         await cog.cog_load()
         embed = cog._create_help_embed()
 
-        services_field = next(
-            (f for f in embed.fields if "Services" in f.name), None
-        )
+        services_field = next((f for f in embed.fields if "Services" in f.name), None)
         assert services_field is not None
 
     @pytest.mark.asyncio
@@ -712,7 +742,10 @@ class TestResponseHelpers:
 
     @pytest.mark.asyncio
     async def test_send_result_embed(
-        self, cog: RegistrationCog, mock_dm_channel: MagicMock, successful_result: RegistrationResult
+        self,
+        cog: RegistrationCog,
+        mock_dm_channel: MagicMock,
+        successful_result: RegistrationResult,
     ) -> None:
         """Test _send_result_embed sends result embed."""
         await cog._send_result_embed(mock_dm_channel, successful_result)

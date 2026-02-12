@@ -413,10 +413,7 @@ class JellyfinClient:
         """
         users = await self.get_users()
         username_lower = username.lower()
-        return any(
-            user.get("Name", "").lower() == username_lower
-            for user in users
-        )
+        return any(user.get("Name", "").lower() == username_lower for user in users)
 
     async def create_user(self, username: str, password: str) -> dict:
         """

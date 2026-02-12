@@ -43,6 +43,7 @@ See Also:
     - Navidrome GitHub: https://github.com/navidrome/navidrome
     - bot.cogs.registration.handler: Uses this service for user registration
 """
+
 from __future__ import annotations
 
 import logging
@@ -190,9 +191,7 @@ class NavidromeClient:
         ...     await client.close()
     """
 
-    def __init__(
-        self, base_url: str, admin_user: str, admin_password: str
-    ) -> None:
+    def __init__(self, base_url: str, admin_user: str, admin_password: str) -> None:
         """
         Initialize the Navidrome client.
 
@@ -664,9 +663,7 @@ class NavidromeService:
         - bot.config.NavidromeConfig: Configuration with URL list.
     """
 
-    def __init__(
-        self, urls: list[str], admin_user: str, admin_password: str
-    ) -> None:
+    def __init__(self, urls: list[str], admin_user: str, admin_password: str) -> None:
         """
         Initialize the Navidrome service.
 

@@ -146,7 +146,9 @@ class TestRegistrationResult:
             password="SecurePass123!",
             services=[
                 ServiceResult("Jellyfin", success=True, message="Created"),
-                ServiceResult("NextCloud", success=True, message="Exists", already_existed=True),
+                ServiceResult(
+                    "NextCloud", success=True, message="Exists", already_existed=True
+                ),
                 ServiceResult("Navidrome", success=False, message="Failed"),
             ],
         )
@@ -162,7 +164,9 @@ class TestRegistrationResult:
             password="SecurePass123!",
             services=[
                 ServiceResult("Jellyfin", success=True, message="Created"),
-                ServiceResult("NextCloud", success=True, message="Exists", already_existed=True),
+                ServiceResult(
+                    "NextCloud", success=True, message="Exists", already_existed=True
+                ),
             ],
         )
         existed = result.already_existed
@@ -681,7 +685,9 @@ class TestRegistrationServiceResetPassword:
         result = await service.reset_password("testuser", "MyCustomPassword123!")
 
         assert result.password == "MyCustomPassword123!"
-        jellyfin.set_password.assert_called_once_with("testuser", "MyCustomPassword123!")
+        jellyfin.set_password.assert_called_once_with(
+            "testuser", "MyCustomPassword123!"
+        )
 
     @pytest.mark.asyncio
     async def test_reset_password_user_not_found(self) -> None:
@@ -785,5 +791,7 @@ class TestRegistrationServiceResetPassword:
 
         assert len(result.services) == 4
         assert result.all_success is True
-        assert all(sr.service_name in ["Jellyfin", "NextCloud", "Navidrome", "Romm"]
-                   for sr in result.services)
+        assert all(
+            sr.service_name in ["Jellyfin", "NextCloud", "Navidrome", "Romm"]
+            for sr in result.services
+        )

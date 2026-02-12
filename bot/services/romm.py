@@ -46,6 +46,7 @@ See Also:
     - Romm GitHub: https://github.com/rommapp/romm
     - bot.cogs.registration.handler: Uses this service for user registration
 """
+
 from __future__ import annotations
 
 import logging
@@ -193,9 +194,7 @@ class RommClient:
         ...     await client.close()
     """
 
-    def __init__(
-        self, base_url: str, admin_user: str, admin_password: str
-    ) -> None:
+    def __init__(self, base_url: str, admin_user: str, admin_password: str) -> None:
         """
         Initialize the Romm client.
 
@@ -295,9 +294,7 @@ class RommClient:
                 return token
 
         except aiohttp.ClientConnectorError as e:
-            raise RommConnectionError(
-                f"Cannot connect to Romm at {self.base_url}: {e}"
-            )
+            raise RommConnectionError(f"Cannot connect to Romm at {self.base_url}: {e}")
         except aiohttp.ClientError as e:
             raise RommError(f"HTTP error during login: {e}")
 
@@ -368,9 +365,7 @@ class RommClient:
                 return await self._handle_response(response)
 
         except aiohttp.ClientConnectorError as e:
-            raise RommConnectionError(
-                f"Cannot connect to Romm at {self.base_url}: {e}"
-            )
+            raise RommConnectionError(f"Cannot connect to Romm at {self.base_url}: {e}")
         except aiohttp.ClientError as e:
             raise RommError(f"HTTP error: {e}")
 
@@ -674,9 +669,7 @@ class RommService:
         - bot.config.RommConfig: Configuration with URL list.
     """
 
-    def __init__(
-        self, urls: list[str], admin_user: str, admin_password: str
-    ) -> None:
+    def __init__(self, urls: list[str], admin_user: str, admin_password: str) -> None:
         """
         Initialize the Romm service.
 

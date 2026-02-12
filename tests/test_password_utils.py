@@ -57,10 +57,7 @@ class TestGeneratePassword:
         passwords = [generate_password(length=32) for _ in range(10)]
         special_chars = set("!@#$%^&*")
 
-        has_special = any(
-            any(c in special_chars for c in pwd)
-            for pwd in passwords
-        )
+        has_special = any(any(c in special_chars for c in pwd) for pwd in passwords)
         assert has_special, "No special characters found in any generated password"
 
     def test_exclude_special_characters(self) -> None:

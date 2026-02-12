@@ -33,6 +33,7 @@ See Also:
     - bot.services.user_registry: User mapping persistence
     - bot.config: Registration and service configuration
 """
+
 from __future__ import annotations
 
 import logging
@@ -193,7 +194,9 @@ class RegistrationCog(commands.Cog, name="Registration"):
         password = parts[2] if len(parts) >= 3 else None
 
         # Process the registration
-        await self._process_registration(message.channel, message.author, username, email, password)
+        await self._process_registration(
+            message.channel, message.author, username, email, password
+        )
 
     # -------------------------------------------------------------------------
     # Slash Commands
@@ -252,7 +255,9 @@ class RegistrationCog(commands.Cog, name="Registration"):
             return
 
         # Process registration
-        await self._process_registration_interaction(interaction, username, email, password)
+        await self._process_registration_interaction(
+            interaction, username, email, password
+        )
 
     @app_commands.command(
         name="help",
@@ -402,10 +407,14 @@ class RegistrationCog(commands.Cog, name="Registration"):
         async with channel.typing():
             # Perform registration
             try:
-                result = await self.registration_service.register_user(username, email, password)
+                result = await self.registration_service.register_user(
+                    username, email, password
+                )
             except Exception as e:
                 logger.error(f"Registration failed for {username}: {e}")
-                await self._send_error(channel, "An unexpected error occurred during registration.")
+                await self._send_error(
+                    channel, "An unexpected error occurred during registration."
+                )
                 return
 
         # Save to registry if any registration succeeded
@@ -488,11 +497,15 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         # Perform registration
         try:
-            result = await self.registration_service.register_user(username, email, password)
+            result = await self.registration_service.register_user(
+                username, email, password
+            )
         except Exception as e:
             logger.error(f"Registration failed for {username}: {e}")
             await interaction.followup.send(
-                embed=self._create_error_embed("An unexpected error occurred during registration."),
+                embed=self._create_error_embed(
+                    "An unexpected error occurred during registration."
+                ),
                 ephemeral=True,
             )
             return
@@ -572,7 +585,9 @@ class RegistrationCog(commands.Cog, name="Registration"):
         except Exception as e:
             logger.error(f"Password reset failed for {username}: {e}")
             await interaction.followup.send(
-                embed=self._create_error_embed("An unexpected error occurred during password reset."),
+                embed=self._create_error_embed(
+                    "An unexpected error occurred during password reset."
+                ),
                 ephemeral=True,
             )
             return
@@ -643,7 +658,11 @@ class RegistrationCog(commands.Cog, name="Registration"):
                 status = "❌"
                 text = f"{status} **{sr.service_name}** - Failed"
                 if sr.error:
-                    text += f"\n   └ `{sr.error[:50]}...`" if len(sr.error) > 50 else f"\n   └ `{sr.error}`"
+                    text += (
+                        f"\n   └ `{sr.error[:50]}...`"
+                        if len(sr.error) > 50
+                        else f"\n   └ `{sr.error}`"
+                    )
             services_text.append(text)
 
         embed.add_field(
@@ -654,9 +673,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         # Add footer with security reminder
         if result.any_success:
-            embed.set_footer(
-                text="⚠️ Save this password! It won't be shown again."
-            )
+            embed.set_footer(text="⚠️ Save this password! It won't be shown again.")
 
         return embed
 
@@ -677,7 +694,9 @@ class RegistrationCog(commands.Cog, name="Registration"):
         )
         return embed
 
-    def _create_password_reset_embed(self, result: PasswordResetResult) -> discord.Embed:
+    def _create_password_reset_embed(
+        self, result: PasswordResetResult
+    ) -> discord.Embed:
         """
         Create an embed displaying password reset results.
 
@@ -725,7 +744,9 @@ class RegistrationCog(commands.Cog, name="Registration"):
                 status = "❌"
                 text = f"{status} **{sr.service_name}** - {sr.message}"
                 if sr.error and sr.error != sr.message:
-                    error_msg = sr.error[:50] + "..." if len(sr.error) > 50 else sr.error
+                    error_msg = (
+                        sr.error[:50] + "..." if len(sr.error) > 50 else sr.error
+                    )
                     text += f"\n   └ `{error_msg}`"
             services_text.append(text)
 
@@ -737,9 +758,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         # Add footer with security reminder
         if result.any_success:
-            embed.set_footer(
-                text="⚠️ Save this password! It won't be shown again."
-            )
+            embed.set_footer(text="⚠️ Save this password! It won't be shown again.")
 
         return embed
 
@@ -754,40 +773,75 @@ class RegistrationCog(commands.Cog, name="Registration"):
         lines: list[str] = []
         cfg = self.bot.config
 
-        if getattr(cfg, "jellyfin", None) and cfg.jellyfin.enabled and cfg.jellyfin.urls:
+        if (
+            getattr(cfg, "jellyfin", None)
+            and cfg.jellyfin.enabled
+            and cfg.jellyfin.urls
+        ):
             url = cfg.jellyfin.urls[0]
             line = f"• [Jellyfin]({url})"
-            if getattr(cfg.jellyfin, "description", None) and cfg.jellyfin.description.strip():
+            if (
+                getattr(cfg.jellyfin, "description", None)
+                and cfg.jellyfin.description.strip()
+            ):
                 line += f" — {cfg.jellyfin.description.strip()}"
             lines.append(line)
 
-        if getattr(cfg, "minecraft", None) and cfg.minecraft.enabled and cfg.minecraft.servers:
+        if (
+            getattr(cfg, "minecraft", None)
+            and cfg.minecraft.enabled
+            and cfg.minecraft.servers
+        ):
             for server in cfg.minecraft.servers:
                 if server.urls:
                     addr = server.urls[0]
                     line = f"• **Minecraft — {server.name}**: `{addr}`"
-                    if getattr(server, "description", None) and server.description.strip():
+                    if (
+                        getattr(server, "description", None)
+                        and server.description.strip()
+                    ):
                         line += f" — {server.description.strip()}"
                     lines.append(line)
 
-        if getattr(cfg, "nextcloud", None) and cfg.nextcloud.enabled and cfg.nextcloud.urls:
+        if (
+            getattr(cfg, "nextcloud", None)
+            and cfg.nextcloud.enabled
+            and cfg.nextcloud.urls
+        ):
             url = cfg.nextcloud.urls[0]
             line = f"• [NextCloud]({url})"
-            if getattr(cfg.nextcloud, "description", None) and cfg.nextcloud.description.strip():
+            if (
+                getattr(cfg.nextcloud, "description", None)
+                and cfg.nextcloud.description.strip()
+            ):
                 line += f" — {cfg.nextcloud.description.strip()}"
             lines.append(line)
 
-        if getattr(cfg, "navidrome", None) and cfg.navidrome.enabled and cfg.navidrome.urls:
+        if (
+            getattr(cfg, "navidrome", None)
+            and cfg.navidrome.enabled
+            and cfg.navidrome.urls
+        ):
             url = cfg.navidrome.urls[0]
             line = f"• [Navidrome]({url})"
-            if getattr(cfg.navidrome, "description", None) and cfg.navidrome.description.strip():
+            if (
+                getattr(cfg.navidrome, "description", None)
+                and cfg.navidrome.description.strip()
+            ):
                 line += f" — {cfg.navidrome.description.strip()}"
             lines.append(line)
 
-        if getattr(cfg, "organizr", None) and cfg.organizr.enabled and cfg.organizr.urls:
+        if (
+            getattr(cfg, "organizr", None)
+            and cfg.organizr.enabled
+            and cfg.organizr.urls
+        ):
             url = cfg.organizr.urls[0]
             line = f"• [Organizr]({url})"
-            if getattr(cfg.organizr, "description", None) and cfg.organizr.description.strip():
+            if (
+                getattr(cfg.organizr, "description", None)
+                and cfg.organizr.description.strip()
+            ):
                 line += f" — {cfg.organizr.description.strip()}"
             lines.append(line)
 
@@ -852,10 +906,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
 
         embed.add_field(
             name="❓ Help",
-            value=(
-                "**`/help`**\n"
-                "Shows this help message (sent via DM)."
-            ),
+            value=("**`/help`**\nShows this help message (sent via DM)."),
             inline=False,
         )
 
@@ -879,9 +930,7 @@ class RegistrationCog(commands.Cog, name="Registration"):
             inline=True,
         )
 
-        embed.set_footer(
-            text="Need more help? Contact an administrator."
-        )
+        embed.set_footer(text="Need more help? Contact an administrator.")
 
         return embed
 

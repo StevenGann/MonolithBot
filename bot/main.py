@@ -332,7 +332,9 @@ class MonolithBot(commands.Bot):
                 self.config.jellyfin.announcement_channel_id
             )
             if announcement_channel:
-                logger.info(f"Jellyfin announcement channel: #{announcement_channel.name}")
+                logger.info(
+                    f"Jellyfin announcement channel: #{announcement_channel.name}"
+                )
             else:
                 logger.warning(
                     f"Could not find Jellyfin announcement channel with ID: "
@@ -352,6 +354,7 @@ class MonolithBot(commands.Bot):
             try:
                 from aiohttp import web
                 from bot.admin_ui import create_app
+
                 app = create_app(bot=self, config=self.config)
                 runner = web.AppRunner(app)
                 await runner.setup()
@@ -579,7 +582,9 @@ class MonolithBot(commands.Bot):
         await self.close()
 
 
-def setup_logging(config: Optional[Config] = None, verbose: bool = False) -> Optional[Path]:
+def setup_logging(
+    config: Optional[Config] = None, verbose: bool = False
+) -> Optional[Path]:
     """
     Configure the logging system for the bot.
 
@@ -612,9 +617,7 @@ def setup_logging(config: Optional[Config] = None, verbose: bool = False) -> Opt
         log_to_file = config.logging.log_to_file
         # Use Jellyfin schedule timezone if available, else UTC
         timezone = (
-            config.jellyfin.schedule.timezone
-            if config.jellyfin.enabled
-            else "UTC"
+            config.jellyfin.schedule.timezone if config.jellyfin.enabled else "UTC"
         )
     else:
         # Fallback for basic logging before config is loaded

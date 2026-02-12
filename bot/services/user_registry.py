@@ -53,6 +53,7 @@ See Also:
     - bot.services.registration: Uses this registry
     - bot.cogs.registration.handler: DM handler that manages registration
 """
+
 from __future__ import annotations
 
 import json
@@ -145,7 +146,9 @@ class UserRegistry:
                   Parent directories will be created if they don't exist.
         """
         self.path = Path(path)
-        self._users: dict[str, RegisteredUser] = {}  # discord_id (str) -> RegisteredUser
+        self._users: dict[
+            str, RegisteredUser
+        ] = {}  # discord_id (str) -> RegisteredUser
         self._usernames: dict[str, str] = {}  # username -> discord_id (str)
         self._loaded = False
 
@@ -203,8 +206,7 @@ class UserRegistry:
         # Build the data structure
         data = {
             "users": {
-                discord_id: user.to_dict()
-                for discord_id, user in self._users.items()
+                discord_id: user.to_dict() for discord_id, user in self._users.items()
             },
             "usernames": self._usernames.copy(),
         }

@@ -54,12 +54,14 @@ def _login_required(handler):
             return web.Response(status=401, text="Not logged in")
         request["admin_username"] = username
         return await handler(request)
+
     return wrapper
 
 
 # -----------------------------------------------------------------------------
 # HTML fragments and pages
 # -----------------------------------------------------------------------------
+
 
 def _base_html(title: str, body: str, extra_head: str = "") -> str:
     return f"""<!DOCTYPE html>
@@ -101,7 +103,9 @@ th {{ color: #888; }}
 
 def _login_page(error: str = "") -> str:
     err = f'<div class="msg error">{html.escape(error)}</div>' if error else ""
-    return _base_html("Admin Login", f"""
+    return _base_html(
+        "Admin Login",
+        f"""
 <div style="max-width: 400px; margin: 2rem auto;">
 <h1>MonolithBot Admin</h1>
 {err}
@@ -117,30 +121,37 @@ def _login_page(error: str = "") -> str:
 <button type="submit">Log in</button>
 </form>
 </div>
-""")
+""",
+    )
 
 
-def _dashboard_page(request: web.Request, active_tab: str = "users", message: str = "", error: str = "") -> str:
+def _dashboard_page(
+    request: web.Request, active_tab: str = "users", message: str = "", error: str = ""
+) -> str:
     username = request["admin_username"]
     is_initial = auth.is_initial_admin(_get_login_path(request), username)
-    msg_html = f'<div class="msg success">{html.escape(message)}</div>' if message else ""
+    msg_html = (
+        f'<div class="msg success">{html.escape(message)}</div>' if message else ""
+    )
     err_html = f'<div class="msg error">{html.escape(error)}</div>' if error else ""
 
     tabs = [
-        ('users', 'Users'),
-        ('sendhelp', 'Send help'),
-        ('reset', 'Password reset'),
-        ('register', 'Register user'),
+        ("users", "Users"),
+        ("sendhelp", "Send help"),
+        ("reset", "Password reset"),
+        ("register", "Register user"),
     ]
     if is_initial:
-        tabs.append(('admins', 'Manage admins'))
+        tabs.append(("admins", "Manage admins"))
 
     tab_links = "".join(
         f'<a href="#" class="tab-link {"active" if t[0] == active_tab else ""}" data-tab="{t[0]}">{html.escape(t[1])}</a>'
         for t in tabs
     )
 
-    return _base_html("Admin Dashboard", f"""
+    return _base_html(
+        "Admin Dashboard",
+        f"""
 <div class="header">
 <h1>MonolithBot Admin</h1>
 <span>Logged in as <strong>{html.escape(username)}</strong> | <a href="/admin/logout">Log out</a></span>
@@ -149,12 +160,12 @@ def _dashboard_page(request: web.Request, active_tab: str = "users", message: st
 {err_html}
 <nav class="tabs" role="tablist">{tab_links}</nav>
 
-<div id="panel-users" class="panel {'active' if active_tab == 'users' else ''}" data-tab="users">
+<div id="panel-users" class="panel {"active" if active_tab == "users" else ""}" data-tab="users">
 <h2>Registered users</h2>
 <div id="users-content">Loading...</div>
 </div>
 
-<div id="panel-sendhelp" class="panel {'active' if active_tab == 'sendhelp' else ''}" data-tab="sendhelp">
+<div id="panel-sendhelp" class="panel {"active" if active_tab == "sendhelp" else ""}" data-tab="sendhelp">
 <h2>Send help message</h2>
 <p>Send the same help message as /help to a user via DM. Use their Discord user ID (snowflake).</p>
 <form method="post" action="/admin/action/send-help">
@@ -166,7 +177,7 @@ def _dashboard_page(request: web.Request, active_tab: str = "users", message: st
 </form>
 </div>
 
-<div id="panel-reset" class="panel {'active' if active_tab == 'reset' else ''}" data-tab="reset">
+<div id="panel-reset" class="panel {"active" if active_tab == "reset" else ""}" data-tab="reset">
 <h2>Trigger password reset</h2>
 <p>Reset password for a registered user. They will receive the new password via DM.</p>
 <form method="post" action="/admin/action/password-reset">
@@ -178,7 +189,7 @@ def _dashboard_page(request: web.Request, active_tab: str = "users", message: st
 </form>
 </div>
 
-<div id="panel-register" class="panel {'active' if active_tab == 'register' else ''}" data-tab="register">
+<div id="panel-register" class="panel {"active" if active_tab == "register" else ""}" data-tab="register">
 <h2>Register a user on their behalf</h2>
 <p>Provide Discord ID, Monolith username, and email. The bot will register them and can DM the result.</p>
 <form method="post" action="/admin/action/register">
@@ -198,7 +209,7 @@ def _dashboard_page(request: web.Request, active_tab: str = "users", message: st
 </form>
 </div>
 
-<div id="panel-admins" class="panel {'active' if active_tab == 'admins' else ''}" data-tab="admins">
+<div id="panel-admins" class="panel {"active" if active_tab == "admins" else ""}" data-tab="admins">
 <h2>Add admin</h2>
 <p>Add a username. When they log in for the first time, the password they enter will become their password.</p>
 <form method="post" action="/admin/action/add-admin">
@@ -223,7 +234,8 @@ document.querySelectorAll('.tab-link').forEach(function(a) {{
   }});
 }});
 </script>
-""")
+""",
+    )
 
 
 async def _render_users_table(request: web.Request) -> str:
@@ -252,6 +264,7 @@ async def _render_users_table(request: web.Request) -> str:
 # Routes
 # -----------------------------------------------------------------------------
 
+
 async def get_index(request: web.Request) -> web.Response:
     if _session_username(request):
         return web.Response(status=302, headers={"Location": "/admin/dashboard"})
@@ -264,7 +277,9 @@ async def post_login(request: web.Request) -> web.Response:
         username = (data.get("username") or "").strip()
         password = data.get("password") or ""
     except Exception:
-        return web.Response(text=_login_page(error="Invalid request"), content_type="text/html")
+        return web.Response(
+            text=_login_page(error="Invalid request"), content_type="text/html"
+        )
 
     login_path = _get_login_path(request)
     if not auth.auth_file_exists(login_path):
@@ -272,17 +287,37 @@ async def post_login(request: web.Request) -> web.Response:
             auth.first_login_setup(login_path, username, password)
             token = auth.create_session(username)
             resp = web.Response(status=302, headers={"Location": "/admin/dashboard"})
-            resp.set_cookie(auth.SESSION_COOKIE_NAME, token, max_age=auth.SESSION_TTL_SECONDS, httponly=True, samesite="Lax")
+            resp.set_cookie(
+                auth.SESSION_COOKIE_NAME,
+                token,
+                max_age=auth.SESSION_TTL_SECONDS,
+                httponly=True,
+                samesite="Lax",
+            )
             return resp
-        return web.Response(text=_login_page(error="Set a username and password to create the first admin account."), content_type="text/html")
+        return web.Response(
+            text=_login_page(
+                error="Set a username and password to create the first admin account."
+            ),
+            content_type="text/html",
+        )
 
     canonical = auth.verify_login(login_path, username, password)
     if not canonical:
-        return web.Response(text=_login_page(error="Invalid username or password."), content_type="text/html")
+        return web.Response(
+            text=_login_page(error="Invalid username or password."),
+            content_type="text/html",
+        )
 
     token = auth.create_session(canonical)
     resp = web.Response(status=302, headers={"Location": "/admin/dashboard"})
-    resp.set_cookie(auth.SESSION_COOKIE_NAME, token, max_age=auth.SESSION_TTL_SECONDS, httponly=True, samesite="Lax")
+    resp.set_cookie(
+        auth.SESSION_COOKIE_NAME,
+        token,
+        max_age=auth.SESSION_TTL_SECONDS,
+        httponly=True,
+        samesite="Lax",
+    )
     return resp
 
 
@@ -299,7 +334,10 @@ async def get_dashboard(request: web.Request) -> web.Response:
     html_content = _dashboard_page(request)
     # Replace users placeholder with actual table
     users_table = await _render_users_table(request)
-    html_content = html_content.replace("<div id=\"users-content\">Loading...</div>", f"<div id=\"users-content\">{users_table}</div>")
+    html_content = html_content.replace(
+        '<div id="users-content">Loading...</div>',
+        f'<div id="users-content">{users_table}</div>',
+    )
     return web.Response(text=html_content, content_type="text/html")
 
 
@@ -310,28 +348,65 @@ async def post_send_help(request: web.Request) -> web.Response:
         raw_id = (data.get("discord_id") or "").strip()
         discord_id = int(raw_id)
     except (ValueError, TypeError):
-        return web.Response(text=_dashboard_page(request, active_tab="sendhelp", error="Invalid Discord ID."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request, active_tab="sendhelp", error="Invalid Discord ID."
+            ),
+            content_type="text/html",
+        )
 
     bot = _get_bot(request)
     if not bot:
-        return web.Response(text=_dashboard_page(request, active_tab="sendhelp", error="Bot not available."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request, active_tab="sendhelp", error="Bot not available."
+            ),
+            content_type="text/html",
+        )
     cog = bot.get_cog("Registration")
     if not cog:
-        return web.Response(text=_dashboard_page(request, active_tab="sendhelp", error="Registration cog not loaded."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request, active_tab="sendhelp", error="Registration cog not loaded."
+            ),
+            content_type="text/html",
+        )
 
     try:
         user = await bot.fetch_user(discord_id)
         if not user:
-            return web.Response(text=_dashboard_page(request, active_tab="sendhelp", error="User not found."), content_type="text/html")
+            return web.Response(
+                text=_dashboard_page(
+                    request, active_tab="sendhelp", error="User not found."
+                ),
+                content_type="text/html",
+            )
         dm = await user.create_dm()
         embed = cog._create_full_help_embed()
         await dm.send(embed=embed)
-        return web.Response(text=_dashboard_page(request, active_tab="sendhelp", message=f"Help message sent to {user} (ID {discord_id})."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request,
+                active_tab="sendhelp",
+                message=f"Help message sent to {user} (ID {discord_id}).",
+            ),
+            content_type="text/html",
+        )
     except discord.Forbidden:
-        return web.Response(text=_dashboard_page(request, active_tab="sendhelp", error="Cannot DM that user (DMs disabled or blocked)."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request,
+                active_tab="sendhelp",
+                error="Cannot DM that user (DMs disabled or blocked).",
+            ),
+            content_type="text/html",
+        )
     except Exception as e:
         logger.exception("Send help failed")
-        return web.Response(text=_dashboard_page(request, active_tab="sendhelp", error=str(e)), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(request, active_tab="sendhelp", error=str(e)),
+            content_type="text/html",
+        )
 
 
 @_login_required
@@ -342,36 +417,79 @@ async def post_password_reset(request: web.Request) -> web.Response:
         if not username:
             raise ValueError("Username required")
     except Exception as e:
-        return web.Response(text=_dashboard_page(request, active_tab="reset", error=str(e)), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(request, active_tab="reset", error=str(e)),
+            content_type="text/html",
+        )
 
     bot = _get_bot(request)
     if not bot:
-        return web.Response(text=_dashboard_page(request, active_tab="reset", error="Bot not available."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request, active_tab="reset", error="Bot not available."
+            ),
+            content_type="text/html",
+        )
     cog = bot.get_cog("Registration")
-    if not cog or not getattr(cog, "user_registry", None) or not getattr(cog, "registration_service", None):
-        return web.Response(text=_dashboard_page(request, active_tab="reset", error="Registration not available."), content_type="text/html")
+    if (
+        not cog
+        or not getattr(cog, "user_registry", None)
+        or not getattr(cog, "registration_service", None)
+    ):
+        return web.Response(
+            text=_dashboard_page(
+                request, active_tab="reset", error="Registration not available."
+            ),
+            content_type="text/html",
+        )
 
     registry = cog.user_registry
     await registry.load()
     user = registry.get_by_username(username)
     if not user:
-        return web.Response(text=_dashboard_page(request, active_tab="reset", error=f"No registered user with username {username!r}."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request,
+                active_tab="reset",
+                error=f"No registered user with username {username!r}.",
+            ),
+            content_type="text/html",
+        )
 
     try:
         result = await cog.registration_service.reset_password(user.username)
         if not result.any_success:
-            return web.Response(text=_dashboard_page(request, active_tab="reset", error="Password reset failed on all services."), content_type="text/html")
+            return web.Response(
+                text=_dashboard_page(
+                    request,
+                    active_tab="reset",
+                    error="Password reset failed on all services.",
+                ),
+                content_type="text/html",
+            )
         discord_user = await bot.fetch_user(user.discord_id)
         if discord_user:
             try:
                 dm = await discord_user.create_dm()
-                await dm.send(f"Your Monolith password has been reset. New password (save it): **{result.password}**")
+                await dm.send(
+                    f"Your Monolith password has been reset. New password (save it): **{result.password}**"
+                )
             except Exception:
                 pass
-        return web.Response(text=_dashboard_page(request, active_tab="reset", message=f"Password reset for {username}. New password sent via DM."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request,
+                active_tab="reset",
+                message=f"Password reset for {username}. New password sent via DM.",
+            ),
+            content_type="text/html",
+        )
     except Exception as e:
         logger.exception("Password reset failed")
-        return web.Response(text=_dashboard_page(request, active_tab="reset", error=str(e)), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(request, active_tab="reset", error=str(e)),
+            content_type="text/html",
+        )
 
 
 @_login_required
@@ -385,19 +503,43 @@ async def post_register(request: web.Request) -> web.Response:
         if not username or not email:
             raise ValueError("Username and email required")
     except (ValueError, TypeError) as e:
-        return web.Response(text=_dashboard_page(request, active_tab="register", error=str(e)), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(request, active_tab="register", error=str(e)),
+            content_type="text/html",
+        )
 
     bot = _get_bot(request)
     if not bot:
-        return web.Response(text=_dashboard_page(request, active_tab="register", error="Bot not available."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request, active_tab="register", error="Bot not available."
+            ),
+            content_type="text/html",
+        )
     cog = bot.get_cog("Registration")
-    if not cog or not getattr(cog, "user_registry", None) or not getattr(cog, "registration_service", None):
-        return web.Response(text=_dashboard_page(request, active_tab="register", error="Registration not available."), content_type="text/html")
+    if (
+        not cog
+        or not getattr(cog, "user_registry", None)
+        or not getattr(cog, "registration_service", None)
+    ):
+        return web.Response(
+            text=_dashboard_page(
+                request, active_tab="register", error="Registration not available."
+            ),
+            content_type="text/html",
+        )
 
     try:
         result = await cog.registration_service.register_user(username, email)
         if not result.any_success:
-            return web.Response(text=_dashboard_page(request, active_tab="register", error="Registration failed on all services."), content_type="text/html")
+            return web.Response(
+                text=_dashboard_page(
+                    request,
+                    active_tab="register",
+                    error="Registration failed on all services.",
+                ),
+                content_type="text/html",
+            )
         services = [sr.service_name for sr in result.services if sr.success]
         discord_user = None
         try:
@@ -408,7 +550,13 @@ async def post_register(request: web.Request) -> web.Response:
         if cog.user_registry.is_discord_user_registered(discord_id):
             cog.user_registry.update_services(discord_id, services)
         else:
-            cog.user_registry.add_user(discord_id=discord_id, discord_name=discord_name, username=username, email=email, services=services)
+            cog.user_registry.add_user(
+                discord_id=discord_id,
+                discord_name=discord_name,
+                username=username,
+                email=email,
+                services=services,
+            )
         await cog.user_registry.save()
         if discord_user:
             try:
@@ -417,10 +565,20 @@ async def post_register(request: web.Request) -> web.Response:
                 await dm.send(embed=embed)
             except Exception:
                 pass
-        return web.Response(text=_dashboard_page(request, active_tab="register", message=f"Registered {username} and sent result via DM."), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(
+                request,
+                active_tab="register",
+                message=f"Registered {username} and sent result via DM.",
+            ),
+            content_type="text/html",
+        )
     except Exception as e:
         logger.exception("Register on behalf failed")
-        return web.Response(text=_dashboard_page(request, active_tab="register", error=str(e)), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(request, active_tab="register", error=str(e)),
+            content_type="text/html",
+        )
 
 
 @_login_required
@@ -431,14 +589,23 @@ async def post_add_admin(request: web.Request) -> web.Response:
         if not new_username:
             raise ValueError("Username required")
     except Exception as e:
-        return web.Response(text=_dashboard_page(request, active_tab="admins", error=str(e)), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(request, active_tab="admins", error=str(e)),
+            content_type="text/html",
+        )
 
     by_username = request["admin_username"]
     login_path = _get_login_path(request)
     ok, msg = auth.add_pending_admin(login_path, new_username, by_username)
     if ok:
-        return web.Response(text=_dashboard_page(request, active_tab="admins", message=msg), content_type="text/html")
-    return web.Response(text=_dashboard_page(request, active_tab="admins", error=msg), content_type="text/html")
+        return web.Response(
+            text=_dashboard_page(request, active_tab="admins", message=msg),
+            content_type="text/html",
+        )
+    return web.Response(
+        text=_dashboard_page(request, active_tab="admins", error=msg),
+        content_type="text/html",
+    )
 
 
 async def get_root(_request: web.Request) -> web.StreamResponse:
@@ -446,7 +613,9 @@ async def get_root(_request: web.Request) -> web.StreamResponse:
     return web.HTTPFound("/admin/")
 
 
-def create_app(bot: Optional["MonolithBot"] = None, config: Any = None) -> web.Application:
+def create_app(
+    bot: Optional["MonolithBot"] = None, config: Any = None
+) -> web.Application:
     app = web.Application()
     app[APP_KEY_BOT] = bot
     app[APP_KEY_CONFIG] = config

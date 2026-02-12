@@ -42,6 +42,7 @@ class TestFirstLoginSetup:
         assert out is True
         assert path.exists()
         import json
+
         data = json.loads(path.read_text())
         assert data["initial_admin"]["username"] == "admin"
         assert "password_hash" in data["initial_admin"]

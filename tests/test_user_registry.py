@@ -516,7 +516,9 @@ class TestUserRegistryAddRemove:
             services=["Jellyfin"],
         )
 
-        updated = registry.update_services(123456789, ["Jellyfin", "NextCloud", "Navidrome"])
+        updated = registry.update_services(
+            123456789, ["Jellyfin", "NextCloud", "Navidrome"]
+        )
 
         assert updated is not None
         assert updated.services == ["Jellyfin", "NextCloud", "Navidrome"]
