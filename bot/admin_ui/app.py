@@ -441,11 +441,17 @@ async def post_add_admin(request: web.Request) -> web.Response:
     return web.Response(text=_dashboard_page(request, active_tab="admins", error=msg), content_type="text/html")
 
 
+async def get_root(_request: web.Request) -> web.StreamResponse:
+    """Redirect root to admin UI."""
+    return web.HTTPFound("/admin/")
+
+
 def create_app(bot: Optional["MonolithBot"] = None, config: Any = None) -> web.Application:
     app = web.Application()
     app[APP_KEY_BOT] = bot
     app[APP_KEY_CONFIG] = config
 
+    app.router.add_get("/", get_root)
     app.router.add_get("/admin/", get_index)
     app.router.add_get("/admin", get_index)
     app.router.add_post("/admin/login", post_login)
