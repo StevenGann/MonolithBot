@@ -220,6 +220,9 @@ class NextCloudClient:
                     # Required header for OCS API
                     "OCS-APIRequest": "true",
                     "Accept": "application/json",
+                    # Required to bypass password confirmation for admin operations
+                    # See: https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-api-overview.html
+                    "NC-Token": "true",
                 },
             )
         return self._session
