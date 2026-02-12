@@ -53,7 +53,7 @@ Configuration:
         - jellyfin.schedule.timezone: IANA timezone for interpreting times
         - jellyfin.schedule.lookback_hours: How far back to look for "new" content
         - jellyfin.content_types: Which types to announce ["Movie", "Series", "Audio"]
-        - discord.announcement_channel_id: Where to post announcements
+        - jellyfin.announcement_channel_id: Where to post announcements
 
 See Also:
     - bot.services.jellyfin: API client for fetching content
@@ -259,7 +259,7 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
         # Resolve the target channel
         if channel is None:
             channel = self.bot.get_channel(
-                self.bot.config.discord.announcement_channel_id
+                self.bot.config.jellyfin.announcement_channel_id
             )
 
         if channel is None:

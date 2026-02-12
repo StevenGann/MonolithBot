@@ -51,23 +51,8 @@ class TestDiscordConfig:
 
     def test_basic_creation(self) -> None:
         """Test creating DiscordConfig with required fields."""
-        config = DiscordConfig(
-            token="test-token",
-            announcement_channel_id=123456789,
-        )
+        config = DiscordConfig(token="test-token")
         assert config.token == "test-token"
-        assert config.announcement_channel_id == 123456789
-        # alert_channel_id should default to announcement_channel_id
-        assert config.alert_channel_id == 123456789
-
-    def test_separate_alert_channel(self) -> None:
-        """Test providing a separate alert channel ID."""
-        config = DiscordConfig(
-            token="test-token",
-            announcement_channel_id=123456789,
-            alert_channel_id=987654321,
-        )
-        assert config.alert_channel_id == 987654321
 
 
 class TestJellyfinScheduleConfig:
@@ -110,12 +95,26 @@ class TestJellyfinConfig:
             enabled=True,
             urls=["http://localhost:8096"],
             api_key="test-api-key",
+            announcement_channel_id=123456789,
         )
         assert config.enabled is True
         assert config.urls == ["http://localhost:8096"]
         assert config.url == "http://localhost:8096"  # Backward compat property
         assert config.api_key == "test-api-key"
+        assert config.announcement_channel_id == 123456789
+        assert config.alert_channel_id == 123456789  # Defaults to announcement
         assert config.content_types == ["Movie", "Series", "Audio"]
+
+    def test_separate_alert_channel(self) -> None:
+        """Test providing a separate alert channel ID."""
+        config = JellyfinConfig(
+            enabled=True,
+            urls=["http://localhost:8096"],
+            api_key="test-api-key",
+            announcement_channel_id=123456789,
+            alert_channel_id=987654321,
+        )
+        assert config.alert_channel_id == 987654321
 
     def test_trailing_slash_removed(self) -> None:
         """Test that trailing slashes are removed from URLs."""
@@ -123,6 +122,7 @@ class TestJellyfinConfig:
             enabled=True,
             urls=["http://localhost:8096/"],
             api_key="test-api-key",
+            announcement_channel_id=123456789,
         )
         assert config.urls == ["http://localhost:8096"]
         assert config.url == "http://localhost:8096"
@@ -133,6 +133,7 @@ class TestJellyfinConfig:
             enabled=True,
             urls=["http://localhost:8096///"],
             api_key="test-api-key",
+            announcement_channel_id=123456789,
         )
         assert config.urls == ["http://localhost:8096"]
         assert config.url == "http://localhost:8096"
@@ -147,6 +148,7 @@ class TestJellyfinConfig:
                 "http://192.168.1.100:8096/",
             ],
             api_key="test-api-key",
+            announcement_channel_id=123456789,
         )
         assert len(config.urls) == 3
         assert config.urls[0] == "http://primary.local:8096"
@@ -161,6 +163,7 @@ class TestJellyfinConfig:
             enabled=False,
             urls=[],
             api_key="",
+            announcement_channel_id=0,
         )
         assert config.url == ""
 
@@ -170,6 +173,7 @@ class TestJellyfinConfig:
             enabled=True,
             urls=["http://localhost:8096"],
             api_key="test-api-key",
+            announcement_channel_id=123456789,
         )
         assert config.schedule.announcement_times == ["17:00"]
         assert config.schedule.timezone == "America/Los_Angeles"
@@ -180,6 +184,7 @@ class TestJellyfinConfig:
             enabled=False,
             urls=[],
             api_key="",
+            announcement_channel_id=0,
         )
         assert config.enabled is False
 
@@ -307,35 +312,18 @@ class TestBuildDiscordConfig:
 
     def test_loads_from_json(self) -> None:
         """Test loading Discord config from JSON."""
-        json_config = {
-            "discord": {
-                "token": "json-token",
-                "announcement_channel_id": 123,
-                "alert_channel_id": 456,
-            }
-        }
+        json_config = {"discord": {"token": "json-token"}}
         with patch.dict(os.environ, {}, clear=True):
             config = _build_discord_config(json_config)
         assert config.token == "json-token"
-        assert config.announcement_channel_id == 123
-        assert config.alert_channel_id == 456
 
     def test_env_overrides_json(self) -> None:
         """Test environment variables override JSON values."""
-        json_config = {
-            "discord": {
-                "token": "json-token",
-                "announcement_channel_id": 123,
-            }
-        }
-        env_vars = {
-            "DISCORD_TOKEN": "env-token",
-            "DISCORD_ANNOUNCEMENT_CHANNEL_ID": "789",
-        }
+        json_config = {"discord": {"token": "json-token"}}
+        env_vars = {"DISCORD_TOKEN": "env-token"}
         with patch.dict(os.environ, env_vars, clear=True):
             config = _build_discord_config(json_config)
         assert config.token == "env-token"
-        assert config.announcement_channel_id == 789
 
     def test_raises_on_missing_token(self) -> None:
         """Test raising error when token is missing."""
@@ -343,14 +331,6 @@ class TestBuildDiscordConfig:
             with pytest.raises(ConfigurationError) as exc_info:
                 _build_discord_config({})
             assert "Discord token is required" in str(exc_info.value)
-
-    def test_raises_on_missing_channel_id(self) -> None:
-        """Test raising error when announcement channel ID is missing."""
-        json_config = {"discord": {"token": "test-token"}}
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ConfigurationError) as exc_info:
-                _build_discord_config(json_config)
-            assert "announcement channel ID is required" in str(exc_info.value)
 
 
 class TestBuildJellyfinScheduleConfig:
@@ -409,6 +389,7 @@ class TestBuildJellyfinConfig:
                 "enabled": True,
                 "url": "http://test:8096",
                 "api_key": "test-key",
+                "announcement_channel_id": 123456789,
                 "content_types": ["Movie", "Series"],
                 "schedule": {
                     "announcement_times": ["12:00"],
@@ -420,6 +401,8 @@ class TestBuildJellyfinConfig:
         assert config.enabled is True
         assert config.url == "http://test:8096"
         assert config.api_key == "test-key"
+        assert config.announcement_channel_id == 123456789
+        assert config.alert_channel_id == 123456789
         assert config.content_types == ["Movie", "Series"]
         assert config.schedule.announcement_times == ["12:00"]
 
@@ -430,16 +413,19 @@ class TestBuildJellyfinConfig:
                 "enabled": True,
                 "url": "http://json:8096",
                 "api_key": "json-key",
+                "announcement_channel_id": 111,
             }
         }
         env_vars = {
             "JELLYFIN_URL": "http://env:8096",
             "JELLYFIN_API_KEY": "env-key",
+            "JELLYFIN_ANNOUNCEMENT_CHANNEL_ID": "999",
         }
         with patch.dict(os.environ, env_vars, clear=True):
             config = _build_jellyfin_config(json_config)
         assert config.url == "http://env:8096"
         assert config.api_key == "env-key"
+        assert config.announcement_channel_id == 999
 
     def test_enabled_defaults_to_true(self) -> None:
         """Test that enabled defaults to True for backward compatibility."""
@@ -447,6 +433,7 @@ class TestBuildJellyfinConfig:
             "jellyfin": {
                 "url": "http://test:8096",
                 "api_key": "test-key",
+                "announcement_channel_id": 123456789,
             }
         }
         with patch.dict(os.environ, {}, clear=True):
@@ -471,6 +458,7 @@ class TestBuildJellyfinConfig:
         json_config = {
             "jellyfin": {
                 "enabled": True,
+                "announcement_channel_id": 123456789,
             }
         }
         with patch.dict(os.environ, {}, clear=True):
@@ -484,12 +472,27 @@ class TestBuildJellyfinConfig:
             "jellyfin": {
                 "enabled": True,
                 "url": "http://test:8096",
+                "announcement_channel_id": 123456789,
             }
         }
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ConfigurationError) as exc_info:
                 _build_jellyfin_config(json_config)
             assert "Jellyfin API key is required" in str(exc_info.value)
+
+    def test_raises_on_missing_announcement_channel_id_when_enabled(self) -> None:
+        """Test raising error when announcement channel ID is missing and enabled."""
+        json_config = {
+            "jellyfin": {
+                "enabled": True,
+                "url": "http://test:8096",
+                "api_key": "test-key",
+            }
+        }
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ConfigurationError) as exc_info:
+                _build_jellyfin_config(json_config)
+            assert "announcement channel ID is required" in str(exc_info.value)
 
 
 # =============================================================================
@@ -508,11 +511,11 @@ class TestLoadConfig:
             config = load_config(temp_config_file)
 
         assert config.discord.token == config_json["discord"]["token"]
-        assert (
-            config.discord.announcement_channel_id
-            == config_json["discord"]["announcement_channel_id"]
-        )
         assert config.jellyfin.enabled == config_json["jellyfin"]["enabled"]
+        assert (
+            config.jellyfin.announcement_channel_id
+            == config_json["jellyfin"]["announcement_channel_id"]
+        )
         assert config.jellyfin.url == config_json["jellyfin"]["url"]
         assert config.jellyfin.api_key == config_json["jellyfin"]["api_key"]
         assert config.jellyfin.content_types == config_json["jellyfin"]["content_types"]
@@ -525,9 +528,9 @@ class TestLoadConfig:
         """Test loading configuration from environment variables only."""
         env_vars = {
             "DISCORD_TOKEN": "env-only-token",
-            "DISCORD_ANNOUNCEMENT_CHANNEL_ID": "111222333",
             "JELLYFIN_URL": "http://env-only:8096",
             "JELLYFIN_API_KEY": "env-only-key",
+            "JELLYFIN_ANNOUNCEMENT_CHANNEL_ID": "111222333",
         }
         # Use a non-existent config file path
         config_path = tmp_path / "nonexistent.json"
@@ -536,7 +539,7 @@ class TestLoadConfig:
             config = load_config(config_path)
 
         assert config.discord.token == "env-only-token"
-        assert config.discord.announcement_channel_id == 111222333
+        assert config.jellyfin.announcement_channel_id == 111222333
         assert config.jellyfin.url == "http://env-only:8096"
         assert config.jellyfin.api_key == "env-only-key"
 
@@ -544,9 +547,9 @@ class TestLoadConfig:
         """Test that default config path is config.json in cwd."""
         env_vars = {
             "DISCORD_TOKEN": "test-token",
-            "DISCORD_ANNOUNCEMENT_CHANNEL_ID": "123",
             "JELLYFIN_URL": "http://test:8096",
             "JELLYFIN_API_KEY": "test-key",
+            "JELLYFIN_ANNOUNCEMENT_CHANNEL_ID": "123",
         }
         with patch.dict(os.environ, env_vars, clear=True):
             # This should not raise even if config.json doesn't exist
@@ -558,7 +561,6 @@ class TestLoadConfig:
         """Test disabling Jellyfin via environment variable."""
         env_vars = {
             "DISCORD_TOKEN": "test-token",
-            "DISCORD_ANNOUNCEMENT_CHANNEL_ID": "123",
             "JELLYFIN_ENABLED": "false",
         }
         config_path = tmp_path / "nonexistent.json"
@@ -957,13 +959,11 @@ class TestLoadConfigWithMinecraft:
     def test_minecraft_disabled_in_minimal_config(self, tmp_path: Path) -> None:
         """Test that Minecraft is disabled when not in config."""
         minimal_json = {
-            "discord": {
-                "token": "test-token",
-                "announcement_channel_id": 123456789,
-            },
+            "discord": {"token": "test-token"},
             "jellyfin": {
                 "url": "http://localhost:8096",
                 "api_key": "test-key",
+                "announcement_channel_id": 123456789,
             },
         }
         config_path = tmp_path / "config.json"

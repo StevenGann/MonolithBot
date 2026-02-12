@@ -14,8 +14,7 @@ while production deployments use environment variables without code changes.
 Example JSON config (config.json):
     {
         "discord": {
-            "token": "BOT_TOKEN",
-            "announcement_channel_id": 123456789
+            "token": "BOT_TOKEN"
         },
         "jellyfin": {
             "enabled": true,
@@ -25,6 +24,8 @@ Example JSON config (config.json):
                 "http://192.168.1.100:8096"
             ],
             "api_key": "API_KEY",
+            "announcement_channel_id": 123456789,
+            "alert_channel_id": 123456789,
             "content_types": ["Movie", "Series", "Audio"],
             "schedule": {
                 "announcement_times": ["17:00"],
@@ -39,10 +40,10 @@ Example JSON config (config.json):
 
 Equivalent environment variables:
     DISCORD_TOKEN=BOT_TOKEN
-    DISCORD_ANNOUNCEMENT_CHANNEL_ID=123456789
     JELLYFIN_ENABLED=true
     JELLYFIN_URL=http://primary:8096,http://secondary:8096,http://192.168.1.100:8096
     JELLYFIN_API_KEY=API_KEY
+    JELLYFIN_ANNOUNCEMENT_CHANNEL_ID=123456789
     JELLYFIN_CONTENT_TYPES=Movie,Series,Audio
     JELLYFIN_SCHEDULE_ANNOUNCEMENT_TIMES=17:00
     JELLYFIN_SCHEDULE_TIMEZONE=America/Los_Angeles
@@ -79,20 +80,9 @@ class DiscordConfig:
     Attributes:
         token: Discord bot token from the Developer Portal.
             Keep this secret - never commit to version control.
-        announcement_channel_id: Channel ID where new content announcements
-            will be posted.
-        alert_channel_id: Channel ID for server status alerts (online/offline).
-            Defaults to announcement_channel_id if not specified.
     """
 
     token: str
-    announcement_channel_id: int
-    alert_channel_id: Optional[int] = None
-
-    def __post_init__(self) -> None:
-        """Set alert_channel_id to announcement_channel_id if not provided."""
-        if self.alert_channel_id is None:
-            self.alert_channel_id = self.announcement_channel_id
 
 
 @dataclass
@@ -136,6 +126,10 @@ class JellyfinConfig:
             During health checks, URLs are tried in order until one works.
         api_key: Jellyfin API key for authentication.
             Generate this in Jellyfin Dashboard → API Keys.
+        announcement_channel_id: Channel ID where Jellyfin content announcements
+            and suggestions are posted.
+        alert_channel_id: Channel ID for Jellyfin server status alerts
+            (online/offline). Defaults to announcement_channel_id if not specified.
         content_types: List of Jellyfin content types to announce.
             Valid values: "Movie", "Series", "Audio", "Episode"
         schedule: Scheduling settings for Jellyfin-specific tasks.
@@ -145,6 +139,8 @@ class JellyfinConfig:
     enabled: bool
     urls: list[str]
     api_key: str
+    announcement_channel_id: int
+    alert_channel_id: Optional[int] = None
     description: str = ""
     content_types: list[str] = field(
         default_factory=lambda: ["Movie", "Series", "Audio"]
@@ -152,8 +148,10 @@ class JellyfinConfig:
     schedule: JellyfinScheduleConfig = field(default_factory=JellyfinScheduleConfig)
 
     def __post_init__(self) -> None:
-        """Normalize all URLs by removing trailing slashes."""
+        """Normalize URLs and set alert_channel_id default."""
         self.urls = [url.rstrip("/") for url in self.urls]
+        if self.alert_channel_id is None:
+            self.alert_channel_id = self.announcement_channel_id
 
     @property
     def url(self) -> str:
@@ -642,13 +640,10 @@ def _build_discord_config(json_config: dict[str, Any]) -> DiscordConfig:
         Populated DiscordConfig object.
 
     Raises:
-        ConfigurationError: If required values (token, announcement_channel_id)
-            are not provided in either source.
+        ConfigurationError: If token is not provided in either source.
 
     Environment Variables:
         - DISCORD_TOKEN: Bot token
-        - DISCORD_ANNOUNCEMENT_CHANNEL_ID: Announcement channel ID
-        - DISCORD_ALERT_CHANNEL_ID: Alert channel ID (optional)
     """
     discord_json = json_config.get("discord", {})
 
@@ -660,27 +655,7 @@ def _build_discord_config(json_config: dict[str, Any]) -> DiscordConfig:
             "or 'discord.token' in config.json"
         )
 
-    # Announcement channel ID is required
-    announcement_channel_id = _get_env_int(
-        "DISCORD_ANNOUNCEMENT_CHANNEL_ID"
-    ) or discord_json.get("announcement_channel_id")
-    if not announcement_channel_id:
-        raise ConfigurationError(
-            "Discord announcement channel ID is required. Set "
-            "DISCORD_ANNOUNCEMENT_CHANNEL_ID environment variable or "
-            "'discord.announcement_channel_id' in config.json"
-        )
-
-    # Alert channel ID is optional (defaults to announcement channel)
-    alert_channel_id = _get_env_int("DISCORD_ALERT_CHANNEL_ID") or discord_json.get(
-        "alert_channel_id"
-    )
-
-    return DiscordConfig(
-        token=token,
-        announcement_channel_id=announcement_channel_id,
-        alert_channel_id=alert_channel_id,
-    )
+    return DiscordConfig(token=token)
 
 
 def _build_jellyfin_schedule_config(
@@ -754,12 +729,14 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
 
     Raises:
         ConfigurationError: If Jellyfin is enabled but required values
-            (urls, api_key) are not provided in either source.
+            (urls, api_key, announcement_channel_id) are not provided.
 
     Environment Variables:
         - JELLYFIN_ENABLED: Whether Jellyfin integration is enabled
         - JELLYFIN_URL: Server base URL(s), comma-separated for multiple
         - JELLYFIN_API_KEY: API key for authentication
+        - JELLYFIN_ANNOUNCEMENT_CHANNEL_ID: Channel for content announcements
+        - JELLYFIN_ALERT_CHANNEL_ID: Channel for server alerts (optional)
         - JELLYFIN_CONTENT_TYPES: Comma-separated content types
 
     JSON supports both single URL and list formats:
@@ -773,6 +750,20 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
     enabled = (
         enabled_env if enabled_env is not None else jellyfin_json.get("enabled", True)
     )
+
+    # Channel IDs (required when enabled)
+    announcement_channel_id = _get_env_int(
+        "JELLYFIN_ANNOUNCEMENT_CHANNEL_ID"
+    ) or jellyfin_json.get("announcement_channel_id")
+    alert_channel_id = _get_env_int("JELLYFIN_ALERT_CHANNEL_ID") or jellyfin_json.get(
+        "alert_channel_id"
+    )
+    if enabled and not announcement_channel_id:
+        raise ConfigurationError(
+            "Jellyfin announcement channel ID is required when enabled. Set "
+            "JELLYFIN_ANNOUNCEMENT_CHANNEL_ID environment variable or "
+            "'jellyfin.announcement_channel_id' in config.json"
+        )
 
     # URLs: env var takes precedence, supports comma-separated list
     # JSON supports both "url" (string) and "urls" (list) for backward compatibility
@@ -829,6 +820,8 @@ def _build_jellyfin_config(json_config: dict[str, Any]) -> JellyfinConfig:
         enabled=enabled,
         urls=urls or [],
         api_key=api_key or "",
+        announcement_channel_id=announcement_channel_id or 0,
+        alert_channel_id=alert_channel_id,
         content_types=content_types,
         schedule=schedule_config,
         description=description,

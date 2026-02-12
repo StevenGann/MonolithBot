@@ -14,15 +14,18 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from bot.config import (
+    AdditionalLinkConfig,
     Config,
     DiscordConfig,
     JellyfinConfig,
     JellyfinScheduleConfig,
+    LoggingConfig,
     MinecraftConfig,
     MinecraftScheduleConfig,
     MinecraftServerConfig,
     NextCloudConfig,
     NavidromeConfig,
+    OrganizrConfig,
     RommConfig,
     RegistrationConfig,
 )
@@ -37,11 +40,7 @@ from bot.services.jellyfin import JellyfinItem, ServerInfo
 @pytest.fixture
 def discord_config() -> DiscordConfig:
     """Create a mock Discord configuration."""
-    return DiscordConfig(
-        token="test-token-12345",
-        announcement_channel_id=123456789,
-        alert_channel_id=987654321,
-    )
+    return DiscordConfig(token="test-token-12345")
 
 
 @pytest.fixture
@@ -64,6 +63,8 @@ def jellyfin_config(jellyfin_schedule_config: JellyfinScheduleConfig) -> Jellyfi
         enabled=True,
         urls=["http://localhost:8096"],
         api_key="test-api-key-12345",
+        announcement_channel_id=123456789,
+        alert_channel_id=987654321,
         content_types=["Movie", "Series", "Audio"],
         schedule=jellyfin_schedule_config,
     )
@@ -155,14 +156,20 @@ def config(
     registration_config: RegistrationConfig,
 ) -> Config:
     """Create a complete mock configuration."""
+    organizr_config = OrganizrConfig(enabled=False)
+    additional_links: list[AdditionalLinkConfig] = []
+    logging_config = LoggingConfig()
     return Config(
         discord=discord_config,
         jellyfin=jellyfin_config,
         minecraft=minecraft_config,
         nextcloud=nextcloud_config,
         navidrome=navidrome_config,
+        organizr=organizr_config,
         romm=romm_config,
         registration=registration_config,
+        additional_links=additional_links,
+        logging=logging_config,
     )
 
 
@@ -172,13 +179,13 @@ def config_json() -> dict[str, Any]:
     return {
         "discord": {
             "token": "test-token-from-json",
-            "announcement_channel_id": 111222333,
-            "alert_channel_id": 444555666,
         },
         "jellyfin": {
             "enabled": True,
             "url": "http://jellyfin.local:8096",
             "api_key": "json-api-key",
+            "announcement_channel_id": 111222333,
+            "alert_channel_id": 444555666,
             "content_types": ["Movie", "Series"],
             "schedule": {
                 "announcement_times": ["12:00", "20:00"],

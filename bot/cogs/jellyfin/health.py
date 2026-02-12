@@ -31,7 +31,7 @@ Configuration:
     Uses these settings from bot.config.jellyfin.schedule:
         - health_check_interval_minutes: How often to check (default: 5)
 
-    And from bot.config.discord:
+    And from bot.config.jellyfin:
         - alert_channel_id: Where to send status notifications
 
 Example Notifications:
@@ -300,7 +300,7 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
             server_info: Information about the recovered server.
             downtime: How long the server was offline (None if unknown).
         """
-        channel = self.bot.get_channel(self.bot.config.discord.alert_channel_id)
+        channel = self.bot.get_channel(self.bot.config.jellyfin.alert_channel_id)
         if channel is None:
             logger.error("Alert channel not found")
             return
@@ -333,7 +333,7 @@ class JellyfinHealthCog(commands.Cog, name="JellyfinHealth"):
         Args:
             error_message: Description of the connection/API error.
         """
-        channel = self.bot.get_channel(self.bot.config.discord.alert_channel_id)
+        channel = self.bot.get_channel(self.bot.config.jellyfin.alert_channel_id)
         if channel is None:
             logger.error("Alert channel not found")
             return

@@ -137,8 +137,6 @@ The easiest way to deploy MonolithBot is with Docker. The image is automatically
 | Setting | Description | Required |
 |---------|-------------|----------|
 | `token` | Discord bot token | ✅ |
-| `announcement_channel_id` | Default channel for content announcements | ✅ |
-| `alert_channel_id` | Default channel for server alerts (defaults to announcement channel) | ❌ |
 
 ### Jellyfin Settings
 
@@ -147,6 +145,8 @@ The easiest way to deploy MonolithBot is with Docker. The image is automatically
 | `enabled` | Enable/disable Jellyfin integration (default: true) | ❌ |
 | `urls` | List of Jellyfin server URLs to try in order | ✅ if enabled |
 | `api_key` | Jellyfin API key | ✅ if enabled |
+| `announcement_channel_id` | Channel for content announcements and suggestions | ✅ if enabled |
+| `alert_channel_id` | Channel for server status alerts (defaults to announcement channel) | ❌ |
 | `content_types` | Types of content to announce (default: Movie, Series, Audio) | ❌ |
 
 #### Jellyfin Schedule Settings
@@ -284,14 +284,14 @@ Configure how MonolithBot logs events to files and console:
 ```json
 {
   "discord": {
-    "token": "YOUR_DISCORD_BOT_TOKEN",
-    "announcement_channel_id": 123456789012345678,
-    "alert_channel_id": 123456789012345678
+    "token": "YOUR_DISCORD_BOT_TOKEN"
   },
   "jellyfin": {
     "enabled": true,
     "urls": ["http://localhost:8096"],
     "api_key": "YOUR_JELLYFIN_API_KEY",
+    "announcement_channel_id": 123456789012345678,
+    "alert_channel_id": 123456789012345678,
     "content_types": ["Movie", "Series", "Audio"],
     "schedule": {
       "announcement_times": ["17:00"],
@@ -408,8 +408,6 @@ For Docker deployment, use these environment variables:
 | Variable | JSON Equivalent |
 |----------|-----------------|
 | `DISCORD_TOKEN` | `discord.token` |
-| `DISCORD_ANNOUNCEMENT_CHANNEL_ID` | `discord.announcement_channel_id` |
-| `DISCORD_ALERT_CHANNEL_ID` | `discord.alert_channel_id` |
 
 ### Jellyfin
 | Variable | JSON Equivalent |
@@ -417,6 +415,8 @@ For Docker deployment, use these environment variables:
 | `JELLYFIN_ENABLED` | `jellyfin.enabled` |
 | `JELLYFIN_URL` | `jellyfin.urls` (single or comma-separated) |
 | `JELLYFIN_API_KEY` | `jellyfin.api_key` |
+| `JELLYFIN_ANNOUNCEMENT_CHANNEL_ID` | `jellyfin.announcement_channel_id` |
+| `JELLYFIN_ALERT_CHANNEL_ID` | `jellyfin.alert_channel_id` |
 | `JELLYFIN_CONTENT_TYPES` | `jellyfin.content_types` (comma-separated) |
 | `JELLYFIN_SCHEDULE_ANNOUNCEMENT_TIMES` | `jellyfin.schedule.announcement_times` |
 | `JELLYFIN_SCHEDULE_SUGGESTION_TIMES` | `jellyfin.schedule.suggestion_times` |

@@ -325,27 +325,26 @@ class MonolithBot(commands.Bot):
         logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
         logger.info(f"Connected to {len(self.guilds)} guild(s)")
 
-        # Validate announcement channel is accessible
-        announcement_channel = self.get_channel(
-            self.config.discord.announcement_channel_id
-        )
-        if announcement_channel:
-            logger.info(f"Announcement channel: #{announcement_channel.name}")
-        else:
-            logger.warning(
-                f"Could not find announcement channel with ID: "
-                f"{self.config.discord.announcement_channel_id}"
+        # Validate Jellyfin channels when enabled
+        if self.config.jellyfin.enabled:
+            announcement_channel = self.get_channel(
+                self.config.jellyfin.announcement_channel_id
             )
-
-        # Validate alert channel is accessible
-        alert_channel = self.get_channel(self.config.discord.alert_channel_id)
-        if alert_channel:
-            logger.info(f"Alert channel: #{alert_channel.name}")
-        else:
-            logger.warning(
-                f"Could not find alert channel with ID: "
-                f"{self.config.discord.alert_channel_id}"
-            )
+            if announcement_channel:
+                logger.info(f"Jellyfin announcement channel: #{announcement_channel.name}")
+            else:
+                logger.warning(
+                    f"Could not find Jellyfin announcement channel with ID: "
+                    f"{self.config.jellyfin.announcement_channel_id}"
+                )
+            alert_channel = self.get_channel(self.config.jellyfin.alert_channel_id)
+            if alert_channel:
+                logger.info(f"Jellyfin alert channel: #{alert_channel.name}")
+            else:
+                logger.warning(
+                    f"Could not find Jellyfin alert channel with ID: "
+                    f"{self.config.jellyfin.alert_channel_id}"
+                )
 
         # Run test mode actions if any are enabled
         if self._test_modes.any_enabled:

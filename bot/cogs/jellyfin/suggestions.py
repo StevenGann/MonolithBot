@@ -51,7 +51,7 @@ Configuration:
     Uses these settings from bot.config:
         - jellyfin.schedule.suggestion_times: List of times like ["12:00", "20:00"]
         - jellyfin.schedule.timezone: IANA timezone for interpreting times
-        - discord.announcement_channel_id: Where to post suggestions
+        - jellyfin.announcement_channel_id: Where to post suggestions
 
 See Also:
     - bot.services.jellyfin: API client for fetching content
@@ -274,7 +274,7 @@ class JellyfinSuggestionsCog(commands.Cog, name="JellyfinSuggestions"):
         # Resolve the target channel
         if channel is None:
             channel = self.bot.get_channel(
-                self.bot.config.discord.announcement_channel_id
+                self.bot.config.jellyfin.announcement_channel_id
             )
 
         if channel is None:
