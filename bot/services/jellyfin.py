@@ -539,6 +539,61 @@ class JellyfinClient:
         logger.info(f"Successfully set password for Jellyfin user: {username}")
         return True
 
+    # -------------------------------------------------------------------------
+    # Session Methods
+    # -------------------------------------------------------------------------
+
+    async def get_sessions(self) -> list[dict]:
+        """
+        Get all active sessions on the Jellyfin server.
+
+        Returns:
+            List of session dicts with keys such as Id, UserId, DeviceName, etc.
+
+        Raises:
+            JellyfinConnectionError: If the server is unreachable.
+            JellyfinAuthError: If the API key is invalid.
+            JellyfinError: For other errors.
+
+        Example:
+            >>> sessions = await client.get_sessions()
+            >>> for s in sessions:
+            ...     print(f"Session {s.get('Id')} - {s.get('DeviceName')}")
+        """
+        data = await self._request("GET", "/Sessions")
+        return data if isinstance(data, list) else []
+
+    async def send_session_message(
+        self,
+        session_id: str,
+        header: str,
+        text: str,
+        timeout_ms: Optional[int] = None,
+    ) -> None:
+        """
+        Send a message to a Jellyfin client session (displays in-app to the user).
+
+        Jellyfin API: POST /Sessions/{Id}/Message with query params Text, Header, TimeoutMs.
+
+        Args:
+            session_id: The session Id from get_sessions().
+            header: Message title/header shown to the user.
+            text: Message body.
+            timeout_ms: Optional. If set, message auto-dismisses after this many ms;
+                if omitted, the user must dismiss the message.
+
+        Raises:
+            JellyfinError: If the session is invalid or the request fails.
+        """
+        params: dict[str, str | int] = {"Text": text, "Header": header}
+        if timeout_ms is not None:
+            params["TimeoutMs"] = timeout_ms
+        await self._request(
+            "POST",
+            f"/Sessions/{session_id}/Message",
+            params=params,
+        )
+
     async def get_recent_items(
         self,
         item_type: str,
@@ -1375,6 +1430,35 @@ class JellyfinService:
         """
         client = await self._ensure_client()
         return await client.user_exists(username)
+
+    async def get_sessions(self) -> list[dict]:
+        """
+        Get all active sessions on the Jellyfin server.
+
+        Delegates to the underlying JellyfinClient. See JellyfinClient.get_sessions.
+        """
+        client = await self._ensure_client()
+        return await client.get_sessions()
+
+    async def send_session_message(
+        self,
+        session_id: str,
+        header: str,
+        text: str,
+        timeout_ms: Optional[int] = None,
+    ) -> None:
+        """
+        Send a message to a Jellyfin client session.
+
+        Delegates to the underlying JellyfinClient. See JellyfinClient.send_session_message.
+        """
+        client = await self._ensure_client()
+        await client.send_session_message(
+            session_id=session_id,
+            header=header,
+            text=text,
+            timeout_ms=timeout_ms,
+        )
 
     async def create_user(self, username: str, password: str) -> dict:
         """

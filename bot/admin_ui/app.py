@@ -8,6 +8,7 @@ and config to be set on the app instance after creation.
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 from typing import TYPE_CHECKING, Any, Optional
@@ -138,6 +139,7 @@ def _dashboard_page(
     tabs = [
         ("users", "Users"),
         ("sendhelp", "Send help"),
+        ("sendmessage", "Send message"),
         ("reset", "Password reset"),
         ("register", "Register user"),
     ]
@@ -174,6 +176,34 @@ def _dashboard_page(
 <input type="text" id="sendhelp_id" name="discord_id" required placeholder="123456789012345678">
 </div>
 <button type="submit">Send help DM</button>
+</form>
+</div>
+
+<div id="panel-sendmessage" class="panel {"active" if active_tab == "sendmessage" else ""}" data-tab="sendmessage">
+<h2>Send message</h2>
+<p>Send a custom message to a user via DM, or to all registered users. Optionally send to all active Jellyfin sessions when sending to all.</p>
+<form method="post" action="/admin/action/send-message">
+<div class="form-group">
+<label>Target</label>
+<label><input type="radio" name="target" value="one" checked> One user (by Discord ID)</label>
+<label><input type="radio" name="target" value="all"> All registered users</label>
+</div>
+<div class="form-group" id="sendmsg-discord-id-group">
+<label for="sendmsg_discord_id">Discord user ID</label>
+<input type="text" id="sendmsg_discord_id" name="discord_id" placeholder="123456789012345678">
+</div>
+<div class="form-group">
+<label for="sendmsg_message">Message</label>
+<textarea id="sendmsg_message" name="message" required rows="4" placeholder="e.g. We will be doing maintenance tonight..."></textarea>
+</div>
+<div class="form-group">
+<label for="sendmsg_header">Header (optional)</label>
+<input type="text" id="sendmsg_header" name="header" placeholder="Message from Monolith">
+</div>
+<div class="form-group" id="sendmsg-jellyfin-group" style="display:none">
+<label><input type="checkbox" name="send_to_jellyfin" value="1"> Also send to all active Jellyfin sessions</label>
+</div>
+<button type="submit">Send</button>
 </form>
 </div>
 
@@ -233,6 +263,23 @@ document.querySelectorAll('.tab-link').forEach(function(a) {{
     if (panel) panel.classList.add('active');
   }});
 }});
+(function() {{
+  var form = document.querySelector('form[action="/admin/action/send-message"]');
+  if (!form) return;
+  var targetRadios = form.querySelectorAll('input[name="target"]');
+  var discordIdGroup = document.getElementById('sendmsg-discord-id-group');
+  var jellyfinGroup = document.getElementById('sendmsg-jellyfin-group');
+  var discordIdInput = document.getElementById('sendmsg_discord_id');
+  function updateSendMessageTarget() {{
+    var target = form.querySelector('input[name="target"]:checked');
+    var isAll = target && target.value === 'all';
+    if (discordIdGroup) discordIdGroup.style.display = isAll ? 'none' : 'block';
+    if (discordIdInput) discordIdInput.required = !isAll;
+    if (jellyfinGroup) jellyfinGroup.style.display = isAll ? 'block' : 'none';
+  }}
+  targetRadios.forEach(function(r) {{ r.addEventListener('change', updateSendMessageTarget); }});
+  updateSendMessageTarget();
+}})();
 </script>
 """,
     )
@@ -407,6 +454,176 @@ async def post_send_help(request: web.Request) -> web.Response:
             text=_dashboard_page(request, active_tab="sendhelp", error=str(e)),
             content_type="text/html",
         )
+
+
+@_login_required
+async def post_send_message(request: web.Request) -> web.Response:
+    """Send a custom message to one user or all registered users; optionally to Jellyfin sessions."""
+    try:
+        data = await request.post()
+        target = (data.get("target") or "one").strip().lower()
+        if target not in ("one", "all"):
+            target = "one"
+        message = (data.get("message") or "").strip()
+        if not message:
+            return web.Response(
+                text=_dashboard_page(
+                    request,
+                    active_tab="sendmessage",
+                    error="Message is required.",
+                ),
+                content_type="text/html",
+            )
+        header = (data.get("header") or "").strip() or "Message from Monolith"
+        send_to_jellyfin = data.get("send_to_jellyfin") == "1"
+    except Exception as e:
+        return web.Response(
+            text=_dashboard_page(request, active_tab="sendmessage", error=str(e)),
+            content_type="text/html",
+        )
+
+    bot = _get_bot(request)
+    if not bot:
+        return web.Response(
+            text=_dashboard_page(
+                request,
+                active_tab="sendmessage",
+                error="Bot not available.",
+            ),
+            content_type="text/html",
+        )
+
+    if target == "one":
+        try:
+            raw_id = (data.get("discord_id") or "").strip()
+            discord_id = int(raw_id)
+        except (ValueError, TypeError):
+            return web.Response(
+                text=_dashboard_page(
+                    request,
+                    active_tab="sendmessage",
+                    error="Invalid Discord ID.",
+                ),
+                content_type="text/html",
+            )
+        try:
+            user = await bot.fetch_user(discord_id)
+            if not user:
+                return web.Response(
+                    text=_dashboard_page(
+                        request,
+                        active_tab="sendmessage",
+                        error="User not found.",
+                    ),
+                    content_type="text/html",
+                )
+            dm = await user.create_dm()
+            embed = discord.Embed(
+                title=header,
+                description=message,
+                color=discord.Color.blue(),
+            )
+            await dm.send(embed=embed)
+            return web.Response(
+                text=_dashboard_page(
+                    request,
+                    active_tab="sendmessage",
+                    message=f"Message sent to {user} (ID {discord_id}).",
+                ),
+                content_type="text/html",
+            )
+        except discord.Forbidden:
+            return web.Response(
+                text=_dashboard_page(
+                    request,
+                    active_tab="sendmessage",
+                    error="Cannot DM that user (DMs disabled or blocked).",
+                ),
+                content_type="text/html",
+            )
+        except Exception as e:
+            logger.exception("Send message failed")
+            return web.Response(
+                text=_dashboard_page(request, active_tab="sendmessage", error=str(e)),
+                content_type="text/html",
+            )
+
+    # target == "all"
+    cog = bot.get_cog("Registration")
+    registry = getattr(cog, "user_registry", None) if cog else None
+    if not registry:
+        if not send_to_jellyfin or not getattr(bot, "jellyfin_service", None):
+            return web.Response(
+                text=_dashboard_page(
+                    request,
+                    active_tab="sendmessage",
+                    error="Registration not loaded or no user registry.",
+                ),
+                content_type="text/html",
+            )
+        users = []
+    else:
+        await registry.load()
+        users = registry.get_all_users()
+
+    sent_discord = 0
+    failed_discord: list[str] = []
+    for u in users:
+        try:
+            discord_user = await bot.fetch_user(u.discord_id)
+            if not discord_user:
+                failed_discord.append(str(u.discord_id))
+                continue
+            dm = await discord_user.create_dm()
+            embed = discord.Embed(
+                title=header,
+                description=message,
+                color=discord.Color.blue(),
+            )
+            await dm.send(embed=embed)
+            sent_discord += 1
+        except discord.Forbidden:
+            failed_discord.append(u.discord_name or str(u.discord_id))
+        except Exception as e:
+            logger.warning("Send message to %s failed: %s", u.discord_id, e)
+            failed_discord.append(u.discord_name or str(u.discord_id))
+        await asyncio.sleep(0.5)
+
+    sent_jellyfin = 0
+    jellyfin_error = ""
+    if send_to_jellyfin and getattr(bot, "jellyfin_service", None):
+        try:
+            jellyfin = bot.jellyfin_service
+            sessions = await jellyfin.get_sessions()
+            for s in sessions:
+                sid = s.get("Id")
+                if not sid:
+                    continue
+                try:
+                    await jellyfin.send_session_message(sid, header, message)
+                    sent_jellyfin += 1
+                except Exception as e:
+                    logger.warning("Jellyfin session %s message failed: %s", sid, e)
+        except Exception as e:
+            logger.exception("Jellyfin send message failed")
+            jellyfin_error = f" Jellyfin: {e}"
+
+    parts = [f"Discord: sent to {sent_discord} users."]
+    if failed_discord:
+        parts.append(f" Failed for {len(failed_discord)}.")
+    if send_to_jellyfin:
+        parts.append(f" Jellyfin: sent to {sent_jellyfin} sessions.")
+    if jellyfin_error:
+        parts.append(jellyfin_error)
+    summary = "".join(parts)
+    return web.Response(
+        text=_dashboard_page(
+            request,
+            active_tab="sendmessage",
+            message=summary,
+        ),
+        content_type="text/html",
+    )
 
 
 @_login_required
@@ -627,6 +844,7 @@ def create_app(
     app.router.add_get("/admin/logout", get_logout)
     app.router.add_get("/admin/dashboard", get_dashboard)
     app.router.add_post("/admin/action/send-help", post_send_help)
+    app.router.add_post("/admin/action/send-message", post_send_message)
     app.router.add_post("/admin/action/password-reset", post_password_reset)
     app.router.add_post("/admin/action/register", post_register)
     app.router.add_post("/admin/action/add-admin", post_add_admin)
