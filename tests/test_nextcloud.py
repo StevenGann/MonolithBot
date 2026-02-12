@@ -188,6 +188,33 @@ class TestNextCloudClientUserExists:
         await client.close()
 
     @pytest.mark.asyncio
+    async def test_user_exists_false_ocs_user_does_not_exist(
+        self, client: NextCloudClient
+    ) -> None:
+        """user_exists returns False when OCS returns 'User does not exist' message."""
+        with aioresponses() as mocked:
+            mocked.get(
+                "http://nextcloud.local/ocs/v1.php/cloud/users/newuser",
+                payload={
+                    "ocs": {
+                        "meta": {
+                            "status": "failure",
+                            "statuscode": 404,
+                            "message": "User does not exist",
+                        },
+                        "data": [],
+                    }
+                },
+                status=200,
+                headers={"Content-Type": "application/json"},
+            )
+
+            result = await client.user_exists("newuser")
+            assert result is False
+
+        await client.close()
+
+    @pytest.mark.asyncio
     async def test_user_exists_auth_error(self, client: NextCloudClient) -> None:
         """Test user exists with authentication error."""
         with aioresponses() as mocked:

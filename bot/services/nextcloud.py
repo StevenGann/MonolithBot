@@ -371,11 +371,15 @@ class NextCloudClient:
             await self._request("GET", f"/ocs/v1.php/cloud/users/{user_id}")
             return True
         except NextCloudError as e:
-            # If we get a 404-like error, user doesn't exist
-            if "not found" in str(e).lower() or "404" in str(e):
+            msg = str(e).lower()
+            # OCS returns "User does not exist" or "not found" for non-existent users
+            if (
+                "not found" in msg
+                or "404" in msg
+                or "user does not exist" in msg
+                or "does not exist" in msg
+            ):
                 return False
-            # OCS returns 100 even for non-existent users in some versions,
-            # so we check if user data is empty
             raise
 
     async def create_user(
