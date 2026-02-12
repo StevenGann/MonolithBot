@@ -10,8 +10,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
-
 from bot.admin_ui import auth
 
 
