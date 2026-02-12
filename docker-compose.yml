@@ -9,6 +9,9 @@ services:
     volumes:
       - /mnt/App-Storage/Container-Data/monolithbot/config/config.json:/app/config.json:ro
       - /mnt/App-Storage/Container-Data/monolithbot/logs:/app/logs
+    # Admin UI (when admin_ui.enabled in config). Use host 0.0.0.0 in config to reach from host.
+    ports:
+      - "5050:5050"
     # Optional: Override specific settings via environment variables
     # (Environment variables take precedence over config.json)
     # Uncomment and set these if you want to override config.json values:
@@ -18,6 +21,9 @@ services:
     #   - JELLYFIN_URL=${JELLYFIN_URL}
     #   - LOG_DIRECTORY=/app/logs
     #   - LOG_LEVEL=INFO
+    #   - ADMIN_UI_ENABLED=true
+    #   - ADMIN_UI_PORT=5050
+    #   - ADMIN_UI_HOST=0.0.0.0
 
     # Optional: Connect to the same network as Jellyfin
     # networks:

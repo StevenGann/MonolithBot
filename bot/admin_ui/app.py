@@ -101,7 +101,6 @@ th {{ color: #888; }}
 
 def _login_page(error: str = "") -> str:
     err = f'<div class="msg error">{html.escape(error)}</div>' if error else ""
-    no_file_msg = ""
     return _base_html("Admin Login", f"""
 <div style="max-width: 400px; margin: 2rem auto;">
 <h1>MonolithBot Admin</h1>
