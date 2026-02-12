@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from bot.config import (
     AdditionalLinkConfig,
+    AdminUIConfig,
     Config,
     DiscordConfig,
     JellyfinConfig,
@@ -157,6 +158,7 @@ def config(
 ) -> Config:
     """Create a complete mock configuration."""
     organizr_config = OrganizrConfig(enabled=False)
+    admin_ui_config = AdminUIConfig(enabled=False)
     additional_links: list[AdditionalLinkConfig] = []
     logging_config = LoggingConfig()
     return Config(
@@ -168,6 +170,7 @@ def config(
         organizr=organizr_config,
         romm=romm_config,
         registration=registration_config,
+        admin_ui=admin_ui_config,
         additional_links=additional_links,
         logging=logging_config,
     )

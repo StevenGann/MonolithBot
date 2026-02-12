@@ -31,7 +31,6 @@ See Also:
 from __future__ import annotations
 
 import logging
-import os
 import re
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler

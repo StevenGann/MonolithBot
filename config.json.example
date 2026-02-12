@@ -96,6 +96,12 @@
   "registration": {
     "enabled": false
   },
+  "admin_ui": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 5050,
+    "admin_login_file": "data/admin-login.json"
+  },
   "logging": {
     "log_directory": "logs",
     "log_level": "INFO",

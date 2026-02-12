@@ -13,7 +13,7 @@ import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -375,7 +375,7 @@ class TestCleanupOldLogs:
             other_file = Path(tmpdir) / "config.json"
             other_file.touch()
 
-            result = cleanup_old_logs(tmpdir, keep_days=0)
+            cleanup_old_logs(tmpdir, keep_days=0)
 
             # Even with keep_days=0, non-log files should not be deleted
             # (The file might still exist if it matches the pattern check)
@@ -388,7 +388,7 @@ class TestCleanupOldLogs:
             wrong_file = Path(tmpdir) / "other.log"
             wrong_file.touch()
 
-            result = cleanup_old_logs(tmpdir, keep_days=0)
+            cleanup_old_logs(tmpdir, keep_days=0)
 
             assert wrong_file.exists()
 

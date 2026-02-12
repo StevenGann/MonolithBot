@@ -173,6 +173,7 @@ class MonolithBot(commands.Bot):
         self.organizr_service: Optional[OrganizrService] = None
         self.romm_service: Optional[RommService] = None
         self.registration_service: Optional[RegistrationService] = None
+        self._admin_ui_runner = None  # aiohttp AppRunner when admin UI is enabled
 
     @property
     def test_mode(self) -> bool:
@@ -345,6 +346,27 @@ class MonolithBot(commands.Bot):
                     f"Could not find Jellyfin alert channel with ID: "
                     f"{self.config.jellyfin.alert_channel_id}"
                 )
+
+        # Start admin UI HTTP server if enabled
+        if getattr(self.config, "admin_ui", None) and self.config.admin_ui.enabled:
+            try:
+                from aiohttp import web
+                from bot.admin_ui import create_app
+                app = create_app(bot=self, config=self.config)
+                runner = web.AppRunner(app)
+                await runner.setup()
+                site = web.TCPSite(
+                    runner,
+                    self.config.admin_ui.host,
+                    self.config.admin_ui.port,
+                )
+                await site.start()
+                self._admin_ui_runner = runner
+                logger.info(
+                    f"Admin UI: http://{self.config.admin_ui.host}:{self.config.admin_ui.port}/admin/"
+                )
+            except Exception as e:
+                logger.exception(f"Failed to start admin UI: {e}")
 
         # Run test mode actions if any are enabled
         if self._test_modes.any_enabled:
@@ -548,6 +570,11 @@ class MonolithBot(commands.Bot):
         # MinecraftService doesn't need explicit close (no persistent connections)
         if self.minecraft_service:
             logger.info("Minecraft service stopped")
+
+        if getattr(self, "_admin_ui_runner", None):
+            await self._admin_ui_runner.cleanup()
+            self._admin_ui_runner = None
+            logger.info("Admin UI stopped")
 
         await self.close()
 

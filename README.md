@@ -247,6 +247,25 @@ You can add custom links to the `/help` command output:
 
 Each service (Jellyfin, Minecraft servers, NextCloud, Navidrome, Organizr, Romm) supports an optional `description` field that is shown in the `/help` command output.
 
+### Admin UI Settings
+
+An optional administrative web UI runs in the same process as the bot when enabled. It provides a login-protected dashboard (responsive, works on mobile and desktop) with:
+
+- List of all registered users and which services they are on
+- Send the help message to any user via DM (by Discord user ID)
+- Trigger a password reset for a user and send the new password via DM
+- Register a user on their behalf (Discord ID, username, email) and optionally DM them the result
+- First admin only: add pending admin usernames; when they log in, their password is set
+
+If `data/admin-login.json` does not exist, the first login creates it with the provided username and hashed password. Bind address defaults to `127.0.0.1` so the UI is not exposed to the network unless you set `host` to `0.0.0.0`.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `admin_ui.enabled` | `false` | Enable the admin UI HTTP server |
+| `admin_ui.host` | `127.0.0.1` | Bind address |
+| `admin_ui.port` | `5050` | TCP port |
+| `admin_ui.admin_login_file` | `data/admin-login.json` | Path to admin credentials file |
+
 ### Logging Settings
 
 Configure how MonolithBot logs events to files and console:
@@ -456,6 +475,14 @@ For Docker deployment, use these environment variables:
 | `ORGANIZR_URL` | `organizr.urls` (single or comma-separated) |
 | `ORGANIZR_ADMIN_USER` | `organizr.admin_user` |
 | `ORGANIZR_ADMIN_PASSWORD` | `organizr.admin_password` |
+
+### Admin UI
+| Variable | JSON Equivalent |
+|----------|-----------------|
+| `ADMIN_UI_ENABLED` | `admin_ui.enabled` |
+| `ADMIN_UI_HOST` | `admin_ui.host` |
+| `ADMIN_UI_PORT` | `admin_ui.port` |
+| `ADMIN_UI_LOGIN_FILE` | `admin_ui.admin_login_file` |
 
 ## Bot Commands
 

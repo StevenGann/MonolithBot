@@ -403,6 +403,27 @@ class RegistrationConfig:
 
 
 @dataclass
+class AdminUIConfig:
+    """
+    Configuration for the administrative web UI.
+
+    When enabled, a small HTTP server runs in the same process as the bot,
+    providing a login-protected dashboard for user management.
+
+    Attributes:
+        enabled: Whether the admin UI HTTP server is started.
+        host: Bind address (e.g. "127.0.0.1" for local only, "0.0.0.0" for LAN).
+        port: TCP port for the admin UI.
+        admin_login_file: Path to JSON file for admin credentials (created on first login).
+    """
+
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 5050
+    admin_login_file: str = "data/admin-login.json"
+
+
+@dataclass
 class LoggingConfig:
     """
     Logging configuration settings.
@@ -459,6 +480,7 @@ class Config:
         organizr: Organizr server connection settings for user provisioning.
         romm: Romm server connection settings for user provisioning.
         registration: Multi-service user registration feature settings.
+        admin_ui: Administrative web UI settings (optional).
         additional_links: Optional list of name/URL pairs shown in /help.
         logging: Logging configuration (directory, level, output targets).
 
@@ -484,6 +506,7 @@ class Config:
     organizr: OrganizrConfig
     romm: RommConfig
     registration: RegistrationConfig
+    admin_ui: AdminUIConfig
     additional_links: list[AdditionalLinkConfig]
     logging: LoggingConfig
 
@@ -1331,6 +1354,38 @@ def _build_registration_config(json_config: dict[str, Any]) -> RegistrationConfi
     return RegistrationConfig(enabled=enabled, registry_file=registry_file)
 
 
+def _build_admin_ui_config(json_config: dict[str, Any]) -> AdminUIConfig:
+    """
+    Build admin UI configuration from JSON and environment variables.
+
+    All settings are optional with safe defaults. Default is disabled.
+    """
+    admin_json = json_config.get("admin_ui", {})
+    if not isinstance(admin_json, dict):
+        admin_json = {}
+
+    enabled = _get_env_bool("ADMIN_UI_ENABLED")
+    if enabled is None:
+        enabled = admin_json.get("enabled", False)
+
+    host = os.environ.get("ADMIN_UI_HOST") or admin_json.get("host", "127.0.0.1")
+    port = _get_env_int("ADMIN_UI_PORT")
+    if port is None:
+        port = admin_json.get("port", 5050)
+
+    admin_login_file = (
+        os.environ.get("ADMIN_UI_LOGIN_FILE")
+        or admin_json.get("admin_login_file", "data/admin-login.json")
+    )
+
+    return AdminUIConfig(
+        enabled=enabled,
+        host=str(host),
+        port=int(port),
+        admin_login_file=str(admin_login_file),
+    )
+
+
 def _build_additional_links_config(json_config: dict[str, Any]) -> list[AdditionalLinkConfig]:
     """
     Build the list of additional name/URL links from JSON.
@@ -1472,6 +1527,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     organizr_config = _build_organizr_config(json_config)
     romm_config = _build_romm_config(json_config)
     registration_config = _build_registration_config(json_config)
+    admin_ui_config = _build_admin_ui_config(json_config)
     additional_links = _build_additional_links_config(json_config)
     logging_config = _build_logging_config(json_config)
 
@@ -1484,6 +1540,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         organizr=organizr_config,
         romm=romm_config,
         registration=registration_config,
+        admin_ui=admin_ui_config,
         additional_links=additional_links,
         logging=logging_config,
     )

@@ -17,3 +17,6 @@ pytz>=2024.1
 
 # Minecraft server status querying
 mcstatus>=11.0.0
+
+# Password hashing for admin UI
+bcrypt>=4.0.0
