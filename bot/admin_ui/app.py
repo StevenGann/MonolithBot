@@ -2,8 +2,35 @@
 aiohttp application for the admin UI.
 
 Serves login, dashboard with tabs (Users, Send help, Password reset,
-Register on behalf, Manage admins), and action handlers. Expects bot
-and config to be set on the app instance after creation.
+Register on behalf, Manage admins), and action handlers.
+
+Route table:
+    GET  /                              → redirect to /admin/
+    GET  /admin/                        → login page (or redirect to dashboard)
+    POST /admin/login                   → authenticate and set session cookie
+    GET  /admin/logout                  → invalidate session and redirect to login
+    GET  /admin/dashboard               → main dashboard (login required)
+    POST /admin/action/send-help        → DM the /help embed to a Discord user
+    POST /admin/action/send-message     → send a custom DM to one or all users
+    POST /admin/action/password-reset   → reset a user's password and DM them
+    POST /admin/action/register         → register a user on behalf of an admin
+    POST /admin/action/add-admin        → add a pending admin username
+
+Authentication:
+    All dashboard routes are protected by the @_login_required decorator, which
+    checks the "admin_session" cookie via auth.get_session(). The session token
+    is stored in process memory (see bot.admin_ui.auth for lifetime notes).
+    Session cookies are set with HttpOnly=True and SameSite=Strict.
+
+Security notes:
+    - Bind address defaults to 127.0.0.1. Do NOT expose to the network without
+      a TLS-terminating reverse proxy.
+    - Exception details from upstream services are logged server-side and a
+      generic message is returned to the browser to prevent information leakage.
+
+App keys (set via create_app):
+    APP_KEY_BOT    – the running MonolithBot instance (may be None in tests)
+    APP_KEY_CONFIG – the bot Config object (may be None in tests)
 """
 
 from __future__ import annotations
@@ -29,25 +56,70 @@ APP_KEY_CONFIG = "config"
 
 
 def _get_bot(request: web.Request) -> Optional["MonolithBot"]:
+    """Retrieve the MonolithBot instance stored in the aiohttp app registry.
+
+    Args:
+        request: The current aiohttp request.
+
+    Returns:
+        The MonolithBot instance, or None if not set (e.g., in tests).
+    """
     return request.app.get(APP_KEY_BOT)
 
 
-def _get_config(request: web.Request):
+def _get_config(request: web.Request) -> Any:
+    """Retrieve the bot Config object stored in the aiohttp app registry.
+
+    Args:
+        request: The current aiohttp request.
+
+    Returns:
+        The Config instance, or None if not set (e.g., in tests).
+    """
     return request.app.get(APP_KEY_CONFIG)
 
 
 def _get_login_path(request: web.Request) -> str:
+    """Return the configured admin-login.json path, with a safe default.
+
+    Args:
+        request: The current aiohttp request.
+
+    Returns:
+        Filesystem path string for the admin credentials file.
+    """
     cfg = _get_config(request)
     return (cfg and cfg.admin_ui.admin_login_file) or "data/admin-login.json"
 
 
 def _session_username(request: web.Request) -> Optional[str]:
+    """Extract and validate the session cookie, returning the admin username.
+
+    Args:
+        request: The current aiohttp request.
+
+    Returns:
+        The authenticated admin username, or None if the session is missing
+        or expired.
+    """
     token = request.cookies.get(auth.SESSION_COOKIE_NAME)
     return auth.get_session(token)
 
 
 def _login_required(handler):
-    async def wrapper(request: web.Request):
+    """Decorator that enforces authentication on a route handler.
+
+    Redirects unauthenticated GET requests to the login page and returns
+    401 for unauthenticated non-GET requests. Sets ``request["admin_username"]``
+    for use by the wrapped handler.
+
+    Args:
+        handler: The async aiohttp route handler to protect.
+
+    Returns:
+        A wrapped handler that checks the session before delegating.
+    """
+    async def wrapper(request: web.Request) -> web.Response:
         username = _session_username(request)
         if not username:
             if request.method == "GET":
@@ -293,7 +365,8 @@ async def _render_users_table(request: web.Request) -> str:
     if not cog or not getattr(cog, "user_registry", None):
         return "<p>Registration not loaded or no user registry.</p>"
     registry = cog.user_registry
-    await registry.load()
+    # registry.load() is idempotent and guarded by self._loaded, but the
+    # registry is already loaded by the cog on startup — no reload needed.
     users = registry.get_all_users()
     if not users:
         return "<p>No registered users.</p>"
@@ -313,12 +386,26 @@ async def _render_users_table(request: web.Request) -> str:
 
 
 async def get_index(request: web.Request) -> web.Response:
+    """Serve the login page, or redirect to the dashboard if already logged in."""
     if _session_username(request):
         return web.Response(status=302, headers={"Location": "/admin/dashboard"})
     return web.Response(text=_login_page(), content_type="text/html")
 
 
 async def post_login(request: web.Request) -> web.Response:
+    """Handle admin login form submission.
+
+    On first use (no login file), creates the initial admin account from the
+    submitted credentials. On subsequent requests, verifies against the stored
+    credentials (including pending admin first-login flow).
+
+    Form fields:
+        username: Admin username.
+        password: Admin password (plaintext; verified against bcrypt hash).
+
+    Returns:
+        Redirect to /admin/dashboard on success, or login page with error.
+    """
     try:
         data = await request.post()
         username = (data.get("username") or "").strip()
@@ -339,7 +426,7 @@ async def post_login(request: web.Request) -> web.Response:
                 token,
                 max_age=auth.SESSION_TTL_SECONDS,
                 httponly=True,
-                samesite="Lax",
+                samesite="Strict",
             )
             return resp
         return web.Response(
@@ -369,6 +456,7 @@ async def post_login(request: web.Request) -> web.Response:
 
 
 async def get_logout(request: web.Request) -> web.Response:
+    """Invalidate the current session and redirect to the login page."""
     token = request.cookies.get(auth.SESSION_COOKIE_NAME)
     auth.drop_session(token)
     resp = web.Response(status=302, headers={"Location": "/admin/"})
@@ -378,6 +466,7 @@ async def get_logout(request: web.Request) -> web.Response:
 
 @_login_required
 async def get_dashboard(request: web.Request) -> web.Response:
+    """Render the main admin dashboard with the current users table."""
     html_content = _dashboard_page(request)
     # Replace users placeholder with actual table
     users_table = await _render_users_table(request)
@@ -390,6 +479,11 @@ async def get_dashboard(request: web.Request) -> web.Response:
 
 @_login_required
 async def post_send_help(request: web.Request) -> web.Response:
+    """Send the /help embed to a Discord user by ID via DM.
+
+    Form fields:
+        discord_id: Snowflake ID of the target Discord user.
+    """
     try:
         data = await request.post()
         raw_id = (data.get("discord_id") or "").strip()
@@ -448,10 +542,10 @@ async def post_send_help(request: web.Request) -> web.Response:
             ),
             content_type="text/html",
         )
-    except Exception as e:
-        logger.exception("Send help failed")
+    except Exception:
+        logger.exception("Send help failed for Discord ID %s", discord_id)
         return web.Response(
-            text=_dashboard_page(request, active_tab="sendhelp", error=str(e)),
+            text=_dashboard_page(request, active_tab="sendhelp", error="Failed to send help message. Check server logs for details."),
             content_type="text/html",
         )
 
@@ -476,9 +570,10 @@ async def post_send_message(request: web.Request) -> web.Response:
             )
         header = (data.get("header") or "").strip() or "Message from Monolith"
         send_to_jellyfin = data.get("send_to_jellyfin") == "1"
-    except Exception as e:
+    except Exception:
+        logger.warning("Failed to parse send-message form data", exc_info=True)
         return web.Response(
-            text=_dashboard_page(request, active_tab="sendmessage", error=str(e)),
+            text=_dashboard_page(request, active_tab="sendmessage", error="Invalid request."),
             content_type="text/html",
         )
 
@@ -541,10 +636,10 @@ async def post_send_message(request: web.Request) -> web.Response:
                 ),
                 content_type="text/html",
             )
-        except Exception as e:
-            logger.exception("Send message failed")
+        except Exception:
+            logger.exception("Send message failed for Discord ID %s", discord_id)
             return web.Response(
-                text=_dashboard_page(request, active_tab="sendmessage", error=str(e)),
+                text=_dashboard_page(request, active_tab="sendmessage", error="Failed to send message. Check server logs for details."),
                 content_type="text/html",
             )
 
@@ -563,7 +658,6 @@ async def post_send_message(request: web.Request) -> web.Response:
             )
         users = []
     else:
-        await registry.load()
         users = registry.get_all_users()
 
     sent_discord = 0
@@ -628,6 +722,15 @@ async def post_send_message(request: web.Request) -> web.Response:
 
 @_login_required
 async def post_password_reset(request: web.Request) -> web.Response:
+    """Reset a registered user's password across all services and DM them the new one.
+
+    Looks the user up by their Monolith username (not Discord ID), delegates to
+    RegistrationService.reset_password(), and attempts to DM the result. DM
+    failures are logged and noted in the success message but do not fail the action.
+
+    Form fields:
+        username: The Monolith username of the user to reset.
+    """
     try:
         data = await request.post()
         username = (data.get("username") or "").strip()
@@ -661,7 +764,6 @@ async def post_password_reset(request: web.Request) -> web.Response:
         )
 
     registry = cog.user_registry
-    await registry.load()
     user = registry.get_by_username(username)
     if not user:
         return web.Response(
@@ -685,32 +787,49 @@ async def post_password_reset(request: web.Request) -> web.Response:
                 content_type="text/html",
             )
         discord_user = await bot.fetch_user(user.discord_id)
+        dm_note = ""
         if discord_user:
             try:
                 dm = await discord_user.create_dm()
                 await dm.send(
                     f"Your Monolith password has been reset. New password (save it): **{result.password}**"
                 )
+            except discord.Forbidden:
+                logger.warning(
+                    "Could not DM user %s after password reset (DMs disabled)", user.discord_id
+                )
+                dm_note = " (DM failed — user has DMs disabled)"
             except Exception:
-                pass
+                logger.warning("Failed to DM user %s after password reset", user.discord_id, exc_info=True)
+                dm_note = " (DM could not be delivered)"
         return web.Response(
             text=_dashboard_page(
                 request,
                 active_tab="reset",
-                message=f"Password reset for {username}. New password sent via DM.",
+                message=f"Password reset for {username}. New password sent via DM.{dm_note}",
             ),
             content_type="text/html",
         )
-    except Exception as e:
-        logger.exception("Password reset failed")
+    except Exception:
+        logger.exception("Password reset failed for username %r", username)
         return web.Response(
-            text=_dashboard_page(request, active_tab="reset", error=str(e)),
+            text=_dashboard_page(request, active_tab="reset", error="Password reset failed. Check server logs for details."),
             content_type="text/html",
         )
 
 
 @_login_required
 async def post_register(request: web.Request) -> web.Response:
+    """Register a user on all services on their behalf, then DM them the result.
+
+    Adds the user to the registry keyed by Discord ID. DM failures are logged
+    and noted in the success message but do not fail the action.
+
+    Form fields:
+        discord_id: Snowflake ID of the Discord user to register.
+        username:   Desired Monolith username.
+        email:      User's email address.
+    """
     try:
         data = await request.post()
         raw_id = (data.get("discord_id") or "").strip()
@@ -761,8 +880,10 @@ async def post_register(request: web.Request) -> web.Response:
         discord_user = None
         try:
             discord_user = await bot.fetch_user(discord_id)
+        except discord.NotFound:
+            logger.warning("Discord user %s not found when registering on behalf", discord_id)
         except Exception:
-            pass
+            logger.warning("Failed to fetch Discord user %s during registration", discord_id, exc_info=True)
         discord_name = str(discord_user) if discord_user else str(discord_id)
         if cog.user_registry.is_discord_user_registered(discord_id):
             cog.user_registry.update_services(discord_id, services)
@@ -775,39 +896,55 @@ async def post_register(request: web.Request) -> web.Response:
                 services=services,
             )
         await cog.user_registry.save()
+        dm_note = ""
         if discord_user:
             try:
                 dm = await discord_user.create_dm()
                 embed = cog._create_result_embed(result)
                 await dm.send(embed=embed)
+            except discord.Forbidden:
+                logger.warning("Could not DM user %s after registration (DMs disabled)", discord_id)
+                dm_note = " (DM failed — user has DMs disabled)"
             except Exception:
-                pass
+                logger.warning("Failed to DM user %s after registration", discord_id, exc_info=True)
+                dm_note = " (DM could not be delivered)"
+        else:
+            dm_note = " (Discord user not found — no DM sent)"
         return web.Response(
             text=_dashboard_page(
                 request,
                 active_tab="register",
-                message=f"Registered {username} and sent result via DM.",
+                message=f"Registered {username}.{dm_note}",
             ),
             content_type="text/html",
         )
-    except Exception as e:
-        logger.exception("Register on behalf failed")
+    except Exception:
+        logger.exception("Register on behalf failed for username %r", username)
         return web.Response(
-            text=_dashboard_page(request, active_tab="register", error=str(e)),
+            text=_dashboard_page(request, active_tab="register", error="Registration failed. Check server logs for details."),
             content_type="text/html",
         )
 
 
 @_login_required
 async def post_add_admin(request: web.Request) -> web.Response:
+    """Add a username to the pending admins list (initial admin only).
+
+    The named user can log in once to claim their account and set a password.
+    Only the initial admin (the one who set up the login file) may call this.
+
+    Form fields:
+        username: The username to add as a pending admin.
+    """
     try:
         data = await request.post()
         new_username = (data.get("username") or "").strip()
         if not new_username:
             raise ValueError("Username required")
-    except Exception as e:
+    except Exception:
+        logger.warning("Failed to parse add-admin form data", exc_info=True)
         return web.Response(
-            text=_dashboard_page(request, active_tab="admins", error=str(e)),
+            text=_dashboard_page(request, active_tab="admins", error="Invalid request."),
             content_type="text/html",
         )
 
@@ -833,6 +970,20 @@ async def get_root(_request: web.Request) -> web.StreamResponse:
 def create_app(
     bot: Optional["MonolithBot"] = None, config: Any = None
 ) -> web.Application:
+    """Create and configure the aiohttp admin UI application.
+
+    Registers all admin routes and stores the bot and config references in
+    the app registry so route handlers can access them via ``_get_bot()`` and
+    ``_get_config()``.
+
+    Args:
+        bot: The running MonolithBot instance. May be None during testing.
+        config: The bot Config object. May be None during testing; handlers
+            will fall back to default paths (e.g., ``data/admin-login.json``).
+
+    Returns:
+        A configured ``web.Application`` ready to be started with a runner.
+    """
     app = web.Application()
     app[APP_KEY_BOT] = bot
     app[APP_KEY_CONFIG] = config

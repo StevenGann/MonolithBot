@@ -105,7 +105,7 @@ class MinecraftHealthCog(commands.Cog, name="MinecraftHealth"):
                 shared services, and Discord channels.
         """
         self.bot = bot
-        self.scheduler = create_scheduler(bot.config)
+        self.scheduler = create_scheduler(bot.config.minecraft.schedule.timezone)
 
     # -------------------------------------------------------------------------
     # Cog Lifecycle

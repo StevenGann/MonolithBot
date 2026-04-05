@@ -49,6 +49,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional
+from urllib.parse import quote
 
 import aiohttp
 
@@ -224,6 +225,7 @@ class NavidromeClient:
                     "Accept": "application/json",
                     "Content-Type": "application/json",
                 },
+                timeout=aiohttp.ClientTimeout(total=30),
             )
         return self._session
 
@@ -607,7 +609,7 @@ class NavidromeClient:
         # Navidrome API: PUT /api/user/{id} with JSON body
         await self._request(
             "PUT",
-            f"/api/user/{user_id}",
+            f"/api/user/{quote(str(user_id), safe='')}",
             json={
                 "password": new_password,
             },

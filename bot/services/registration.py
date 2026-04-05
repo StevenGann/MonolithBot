@@ -42,10 +42,17 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from bot.services.password_utils import generate_password
+from bot.services.password_utils import generate_password, is_strong_password
 from bot.services.organizr import OrganizrUserExistsError
+
+if TYPE_CHECKING:
+    from bot.services.jellyfin import JellyfinService
+    from bot.services.nextcloud import NextCloudService
+    from bot.services.navidrome import NavidromeService
+    from bot.services.organizr import OrganizrService
+    from bot.services.romm import RommService
 
 # Module logger
 logger = logging.getLogger("monolithbot.registration")
@@ -274,11 +281,11 @@ class RegistrationService:
 
     def __init__(
         self,
-        jellyfin_service=None,
-        nextcloud_service=None,
-        navidrome_service=None,
-        organizr_service=None,
-        romm_service=None,
+        jellyfin_service: Optional["JellyfinService"] = None,
+        nextcloud_service: Optional["NextCloudService"] = None,
+        navidrome_service: Optional["NavidromeService"] = None,
+        organizr_service: Optional["OrganizrService"] = None,
+        romm_service: Optional["RommService"] = None,
     ) -> None:
         """
         Initialize the registration service.
@@ -350,9 +357,14 @@ class RegistrationService:
         username = validate_username(username)
         email = validate_email(email)
 
-        # Generate password if not provided
+        # Generate password if not provided; validate if caller supplied one
         if password is None:
             password = generate_password(length=16)
+        elif not is_strong_password(password):
+            raise ValidationError(
+                "Password must be at least 8 characters and contain uppercase, "
+                "lowercase, and a digit."
+            )
 
         logger.info(f"Starting registration for user: {username}")
 
@@ -614,9 +626,14 @@ class RegistrationService:
         # Validate username
         username = validate_username(username)
 
-        # Generate password if not provided
+        # Generate password if not provided; validate if caller supplied one
         if password is None:
             password = generate_password(length=16)
+        elif not is_strong_password(password):
+            raise ValidationError(
+                "Password must be at least 8 characters and contain uppercase, "
+                "lowercase, and a digit."
+            )
 
         logger.info(f"Starting password reset for user: {username}")
 

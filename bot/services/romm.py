@@ -52,6 +52,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional
+from urllib.parse import quote
 
 import aiohttp
 
@@ -226,6 +227,7 @@ class RommClient:
                 headers={
                     "Accept": "application/json",
                 },
+                timeout=aiohttp.ClientTimeout(total=30),
             )
         return self._session
 

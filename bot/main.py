@@ -35,7 +35,7 @@ import signal
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn, Optional
+from typing import Optional
 
 import discord
 from discord.ext import commands
@@ -48,9 +48,6 @@ from bot.services.navidrome import NavidromeService
 from bot.services.organizr import OrganizrService
 from bot.services.romm import RommService
 from bot.services.registration import RegistrationService
-
-if TYPE_CHECKING:
-    pass
 
 # Module-level logger for MonolithBot core
 logger = logging.getLogger("monolithbot")
@@ -819,7 +816,7 @@ async def run_bot(config: Config, test_modes: TestModes) -> None:
         sys.exit(1)
 
 
-def main() -> NoReturn | None:
+def main() -> None:
     """
     Main entry point for MonolithBot.
 

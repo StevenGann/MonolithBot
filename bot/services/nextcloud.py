@@ -48,6 +48,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional
+from urllib.parse import quote
 
 import aiohttp
 
@@ -224,6 +225,7 @@ class NextCloudClient:
                     # See: https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-api-overview.html
                     "NC-Token": "true",
                 },
+                timeout=aiohttp.ClientTimeout(total=30),
             )
         return self._session
 
@@ -371,7 +373,7 @@ class NextCloudClient:
             ...     print("User john exists")
         """
         try:
-            await self._request("GET", f"/ocs/v1.php/cloud/users/{user_id}")
+            await self._request("GET", f"/ocs/v1.php/cloud/users/{quote(user_id, safe='')}")
             return True
         except NextCloudError as e:
             msg = str(e).lower()
@@ -458,7 +460,7 @@ class NextCloudClient:
             ...     print(f"Email: {user.email}")
         """
         try:
-            data = await self._request("GET", f"/ocs/v1.php/cloud/users/{user_id}")
+            data = await self._request("GET", f"/ocs/v1.php/cloud/users/{quote(user_id, safe='')}")
             user_data = data.get("ocs", {}).get("data", {})
 
             if not user_data:
@@ -497,7 +499,7 @@ class NextCloudClient:
         # with key=password and value=new_password
         await self._request(
             "PUT",
-            f"/ocs/v1.php/cloud/users/{user_id}",
+            f"/ocs/v1.php/cloud/users/{quote(user_id, safe='')}",
             data={
                 "key": "password",
                 "value": new_password,

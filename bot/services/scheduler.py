@@ -28,29 +28,30 @@ See Also:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-if TYPE_CHECKING:
-    from bot.config import Config
 
 # Module logger
 logger = logging.getLogger("monolithbot.scheduler")
 
 
-def create_scheduler(config: "Config") -> AsyncIOScheduler:
+def create_scheduler(timezone_name: str) -> AsyncIOScheduler:
     """
-    Create and configure an AsyncIOScheduler instance.
+    Create and configure an AsyncIOScheduler instance for a given timezone.
 
-    Creates a scheduler configured with the timezone from the bot's config
-    and sensible defaults for job execution. The scheduler is returned in
-    a stopped state - the caller must call `scheduler.start()` when ready.
+    The scheduler is returned in a stopped state — the caller must call
+    ``scheduler.start()`` when ready.
+
+    Each cog should create its own scheduler instance using its own section's
+    timezone (e.g., ``config.jellyfin.schedule.timezone`` for Jellyfin cogs,
+    ``config.minecraft.schedule.timezone`` for Minecraft cogs). This ensures
+    scheduled times are always interpreted in the correct timezone regardless
+    of which other features are enabled.
 
     Args:
-        config: Bot configuration object. Uses `config.jellyfin.schedule.timezone`
-            to set the scheduler's timezone for interpreting job times.
+        timezone_name: IANA timezone string (e.g., ``"America/Los_Angeles"``).
+            Sourced from the relevant schedule config section by the caller.
 
     Returns:
         A configured but not-yet-started AsyncIOScheduler instance.
@@ -71,7 +72,10 @@ def create_scheduler(config: "Config") -> AsyncIOScheduler:
           by more than this are skipped (and coalesced if applicable).
 
     Example:
-        >>> scheduler = create_scheduler(config)
+        >>> # Jellyfin cog
+        >>> scheduler = create_scheduler(bot.config.jellyfin.schedule.timezone)
+        >>> # Minecraft cog
+        >>> scheduler = create_scheduler(bot.config.minecraft.schedule.timezone)
         >>> scheduler.add_job(
         ...     my_announcement_func,
         ...     CronTrigger(hour=17, minute=0),
@@ -88,10 +92,10 @@ def create_scheduler(config: "Config") -> AsyncIOScheduler:
         affecting other cogs.
     """
     # Parse timezone string into pytz timezone object
-    timezone = pytz.timezone(config.jellyfin.schedule.timezone)
+    tz = pytz.timezone(timezone_name)
 
     scheduler = AsyncIOScheduler(
-        timezone=timezone,
+        timezone=tz,
         job_defaults={
             "coalesce": True,
             "max_instances": 1,
@@ -99,7 +103,7 @@ def create_scheduler(config: "Config") -> AsyncIOScheduler:
         },
     )
 
-    logger.info(f"Created scheduler with timezone: {config.jellyfin.schedule.timezone}")
+    logger.info(f"Created scheduler with timezone: {timezone_name}")
     return scheduler
 
 

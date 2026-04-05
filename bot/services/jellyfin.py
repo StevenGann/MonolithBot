@@ -270,7 +270,8 @@ class JellyfinClient:
                     # Jellyfin uses X-Emby-Token for API key auth (Emby heritage)
                     "X-Emby-Token": self.api_key,
                     "Accept": "application/json",
-                }
+                },
+                timeout=aiohttp.ClientTimeout(total=30),
             )
         return self._session
 

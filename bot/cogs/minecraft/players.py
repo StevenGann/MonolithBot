@@ -101,7 +101,7 @@ class MinecraftPlayersCog(commands.Cog, name="MinecraftPlayers"):
                 shared services, and Discord channels.
         """
         self.bot = bot
-        self.scheduler = create_scheduler(bot.config)
+        self.scheduler = create_scheduler(bot.config.minecraft.schedule.timezone)
         self._initialized = False
 
     # -------------------------------------------------------------------------

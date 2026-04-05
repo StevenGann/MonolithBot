@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -95,7 +96,21 @@ class RegisteredUser:
 
     @classmethod
     def from_dict(cls, data: dict) -> "RegisteredUser":
-        """Create a RegisteredUser from a dictionary."""
+        """Deserialize a RegisteredUser from a dictionary (e.g., loaded from JSON).
+
+        Args:
+            data: Dictionary containing the following required keys:
+                ``discord_id`` (int), ``discord_name`` (str), ``username`` (str),
+                ``email`` (str), ``registered_at`` (str, ISO 8601). The optional
+                key ``services`` (list[str]) defaults to an empty list.
+
+        Returns:
+            A new RegisteredUser instance.
+
+        Raises:
+            KeyError: If any required key is absent from ``data``.
+            TypeError: If field types do not match (e.g., discord_id is a string).
+        """
         return cls(
             discord_id=data["discord_id"],
             discord_name=data["discord_name"],
@@ -217,8 +232,9 @@ class UserRegistry:
             with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
-            # Atomic rename
+            # Atomic rename then restrict permissions — file contains PII
             temp_path.replace(self.path)
+            os.chmod(self.path, 0o600)
             logger.debug(f"Saved {len(self._users)} users to registry")
 
         except Exception as e:
@@ -331,25 +347,31 @@ class UserRegistry:
 
     def update_services(
         self, discord_id: int, services: list[str]
-    ) -> Optional[RegisteredUser]:
+    ) -> Optional["RegisteredUser"]:
         """
         Update the services list for an existing user.
 
-        This can be used to add services that were registered later
-        or fix the services list.
+        Creates a new RegisteredUser instance rather than mutating the existing
+        one, to avoid aliasing bugs and comply with the project's immutability
+        convention.
 
         Args:
             discord_id: The Discord user ID.
-            services: The new list of services.
+            services: The new complete list of service names for this user.
 
         Returns:
-            The updated RegisteredUser, or None if not found.
+            The updated RegisteredUser, or None if the user is not found.
         """
-        user = self.get_by_discord_id(discord_id)
-        if user:
-            user.services = services
-            logger.info(f"Updated services for {user.username}: {services}")
-        return user
+        from dataclasses import replace
+
+        discord_id_str = str(discord_id)
+        existing = self._users.get(discord_id_str)
+        if existing is None:
+            return None
+        updated = replace(existing, services=services)
+        self._users[discord_id_str] = updated
+        logger.info(f"Updated services for {updated.username}: {services}")
+        return updated
 
     def remove_user(self, discord_id: int) -> Optional[RegisteredUser]:
         """

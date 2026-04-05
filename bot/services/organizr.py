@@ -92,6 +92,7 @@ class OrganizrClient:
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
                 headers={"Accept": "application/json"},
+                timeout=aiohttp.ClientTimeout(total=30),
             )
         return self._session
 

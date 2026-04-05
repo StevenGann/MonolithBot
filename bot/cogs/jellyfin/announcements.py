@@ -145,7 +145,7 @@ class JellyfinAnnouncementsCog(commands.Cog, name="JellyfinAnnouncements"):
                 shared services, and Discord channels.
         """
         self.bot = bot
-        self.scheduler = create_scheduler(bot.config)
+        self.scheduler = create_scheduler(bot.config.jellyfin.schedule.timezone)
 
         # Track when the last announcement was sent
         self._last_announcement: Optional[datetime] = None
