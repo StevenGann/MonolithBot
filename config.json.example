@@ -93,6 +93,20 @@
     "admin_password": "YOUR_ROMM_ADMIN_PASSWORD",
     "description": "ROM library manager"
   },
+  "radarr": {
+    "enabled": false,
+    "url": "http://radarr:7878",
+    "api_key": "YOUR_RADARR_API_KEY",
+    "root_folder_path": "/movies",
+    "quality_profile_id": 1
+  },
+  "sonarr": {
+    "enabled": false,
+    "url": "http://sonarr:8989",
+    "api_key": "YOUR_SONARR_API_KEY",
+    "root_folder_path": "/tv",
+    "quality_profile_id": 1
+  },
   "registration": {
     "enabled": false
   },

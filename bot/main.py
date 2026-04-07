@@ -46,7 +46,9 @@ from bot.services.minecraft import MinecraftService
 from bot.services.nextcloud import NextCloudService
 from bot.services.navidrome import NavidromeService
 from bot.services.organizr import OrganizrService
+from bot.services.radarr import RadarrService
 from bot.services.romm import RommService
+from bot.services.sonarr import SonarrService
 from bot.services.registration import RegistrationService
 
 # Module-level logger for MonolithBot core
@@ -168,7 +170,9 @@ class MonolithBot(commands.Bot):
         self.nextcloud_service: Optional[NextCloudService] = None
         self.navidrome_service: Optional[NavidromeService] = None
         self.organizr_service: Optional[OrganizrService] = None
+        self.radarr_service: Optional[RadarrService] = None
         self.romm_service: Optional[RommService] = None
+        self.sonarr_service: Optional[SonarrService] = None
         self.registration_service: Optional[RegistrationService] = None
         self._admin_ui_runner = None  # aiohttp AppRunner when admin UI is enabled
 
@@ -253,6 +257,24 @@ class MonolithBot(commands.Bot):
                 f"Romm service initialized with {len(self.config.romm.urls)} URL(s)"
             )
 
+        if self.config.radarr.enabled:
+            self.radarr_service = RadarrService(
+                url=self.config.radarr.url,
+                api_key=self.config.radarr.api_key,
+                root_folder_path=self.config.radarr.root_folder_path,
+                quality_profile_id=self.config.radarr.quality_profile_id,
+            )
+            logger.info("Radarr service initialized")
+
+        if self.config.sonarr.enabled:
+            self.sonarr_service = SonarrService(
+                url=self.config.sonarr.url,
+                api_key=self.config.sonarr.api_key,
+                root_folder_path=self.config.sonarr.root_folder_path,
+                quality_profile_id=self.config.sonarr.quality_profile_id,
+            )
+            logger.info("Sonarr service initialized")
+
         # Initialize the registration orchestrator service
         if self.config.registration.enabled:
             self.registration_service = RegistrationService(
@@ -298,6 +320,12 @@ class MonolithBot(commands.Bot):
             logger.info("Registration feature enabled - loading Registration cog")
         else:
             logger.info("Registration feature disabled - skipping Registration cog")
+
+        if self.config.radarr.enabled or self.config.sonarr.enabled:
+            cogs_to_load.append("bot.cogs.jellyfin.requests")
+            logger.info("Radarr/Sonarr enabled - loading content request cog")
+        else:
+            logger.info("Radarr/Sonarr disabled - skipping content request cog")
 
         for cog in cogs_to_load:
             try:
@@ -566,6 +594,14 @@ class MonolithBot(commands.Bot):
         if self.romm_service:
             await self.romm_service.close()
             logger.info("Romm service closed")
+
+        if self.radarr_service:
+            await self.radarr_service.close()
+            logger.info("Radarr service closed")
+
+        if self.sonarr_service:
+            await self.sonarr_service.close()
+            logger.info("Sonarr service closed")
 
         # MinecraftService doesn't need explicit close (no persistent connections)
         if self.minecraft_service:

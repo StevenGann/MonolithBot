@@ -383,6 +383,58 @@ class RommConfig:
 
 
 @dataclass
+class RadarrConfig:
+    """
+    Radarr server configuration for movie requests.
+
+    When enabled, the /jf-request command can add movies to Radarr.
+
+    Attributes:
+        enabled: Whether Radarr integration is enabled.
+        url: Radarr server URL (e.g. "http://radarr:7878").
+        api_key: Radarr API key.
+        root_folder_path: Filesystem path to the root movies folder.
+        quality_profile_id: Radarr quality profile ID to use when adding movies.
+    """
+
+    enabled: bool = False
+    url: str = ""
+    api_key: str = ""
+    root_folder_path: str = "/movies"
+    quality_profile_id: int = 1
+
+    def __post_init__(self) -> None:
+        """Normalize URL by removing trailing slash."""
+        self.url = self.url.rstrip("/")
+
+
+@dataclass
+class SonarrConfig:
+    """
+    Sonarr server configuration for TV show requests.
+
+    When enabled, the /jf-request command can add TV series to Sonarr.
+
+    Attributes:
+        enabled: Whether Sonarr integration is enabled.
+        url: Sonarr server URL (e.g. "http://sonarr:8989").
+        api_key: Sonarr API key.
+        root_folder_path: Filesystem path to the root TV folder.
+        quality_profile_id: Sonarr quality profile ID to use when adding series.
+    """
+
+    enabled: bool = False
+    url: str = ""
+    api_key: str = ""
+    root_folder_path: str = "/tv"
+    quality_profile_id: int = 1
+
+    def __post_init__(self) -> None:
+        """Normalize URL by removing trailing slash."""
+        self.url = self.url.rstrip("/")
+
+
+@dataclass
 class RegistrationConfig:
     """
     Configuration for the multi-service user registration feature.
@@ -505,6 +557,8 @@ class Config:
     navidrome: NavidromeConfig
     organizr: OrganizrConfig
     romm: RommConfig
+    radarr: RadarrConfig
+    sonarr: SonarrConfig
     registration: RegistrationConfig
     admin_ui: AdminUIConfig
     additional_links: list[AdditionalLinkConfig]
@@ -1327,6 +1381,124 @@ def _build_romm_config(json_config: dict[str, Any]) -> RommConfig:
     )
 
 
+def _build_radarr_config(json_config: dict[str, Any]) -> RadarrConfig:
+    """
+    Build Radarr configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        Populated RadarrConfig object.
+
+    Raises:
+        ConfigurationError: If Radarr is enabled but required settings are missing.
+
+    Environment Variables:
+        - RADARR_ENABLED: Whether Radarr integration is enabled
+        - RADARR_URL: Radarr server URL
+        - RADARR_API_KEY: Radarr API key
+        - RADARR_ROOT_FOLDER_PATH: Root folder path for movies
+        - RADARR_QUALITY_PROFILE_ID: Quality profile ID (integer)
+    """
+    radarr_json = json_config.get("radarr", {})
+
+    enabled_env = _get_env_bool("RADARR_ENABLED")
+    enabled = (
+        enabled_env if enabled_env is not None else radarr_json.get("enabled", False)
+    )
+
+    url = _get_env("RADARR_URL") or radarr_json.get("url", "")
+    api_key = _get_env("RADARR_API_KEY") or radarr_json.get("api_key", "")
+    root_folder_path = _get_env("RADARR_ROOT_FOLDER_PATH") or radarr_json.get(
+        "root_folder_path", "/movies"
+    )
+    quality_profile_id = _get_env_int("RADARR_QUALITY_PROFILE_ID") or radarr_json.get(
+        "quality_profile_id", 1
+    )
+
+    if enabled:
+        if not url:
+            raise ConfigurationError(
+                "Radarr URL is required when enabled. Set RADARR_URL environment "
+                "variable or 'radarr.url' in config.json"
+            )
+        if not api_key:
+            raise ConfigurationError(
+                "Radarr API key is required when enabled. Set RADARR_API_KEY "
+                "environment variable or 'radarr.api_key' in config.json"
+            )
+
+    return RadarrConfig(
+        enabled=enabled,
+        url=url,
+        api_key=api_key,
+        root_folder_path=root_folder_path,
+        quality_profile_id=quality_profile_id,
+    )
+
+
+def _build_sonarr_config(json_config: dict[str, Any]) -> SonarrConfig:
+    """
+    Build Sonarr configuration from JSON and environment variables.
+
+    Environment variables take precedence over JSON values.
+
+    Args:
+        json_config: Parsed JSON configuration dictionary.
+
+    Returns:
+        Populated SonarrConfig object.
+
+    Raises:
+        ConfigurationError: If Sonarr is enabled but required settings are missing.
+
+    Environment Variables:
+        - SONARR_ENABLED: Whether Sonarr integration is enabled
+        - SONARR_URL: Sonarr server URL
+        - SONARR_API_KEY: Sonarr API key
+        - SONARR_ROOT_FOLDER_PATH: Root folder path for TV shows
+        - SONARR_QUALITY_PROFILE_ID: Quality profile ID (integer)
+    """
+    sonarr_json = json_config.get("sonarr", {})
+
+    enabled_env = _get_env_bool("SONARR_ENABLED")
+    enabled = (
+        enabled_env if enabled_env is not None else sonarr_json.get("enabled", False)
+    )
+
+    url = _get_env("SONARR_URL") or sonarr_json.get("url", "")
+    api_key = _get_env("SONARR_API_KEY") or sonarr_json.get("api_key", "")
+    root_folder_path = _get_env("SONARR_ROOT_FOLDER_PATH") or sonarr_json.get(
+        "root_folder_path", "/tv"
+    )
+    quality_profile_id = _get_env_int("SONARR_QUALITY_PROFILE_ID") or sonarr_json.get(
+        "quality_profile_id", 1
+    )
+
+    if enabled:
+        if not url:
+            raise ConfigurationError(
+                "Sonarr URL is required when enabled. Set SONARR_URL environment "
+                "variable or 'sonarr.url' in config.json"
+            )
+        if not api_key:
+            raise ConfigurationError(
+                "Sonarr API key is required when enabled. Set SONARR_API_KEY "
+                "environment variable or 'sonarr.api_key' in config.json"
+            )
+
+    return SonarrConfig(
+        enabled=enabled,
+        url=url,
+        api_key=api_key,
+        root_folder_path=root_folder_path,
+        quality_profile_id=quality_profile_id,
+    )
+
+
 def _build_registration_config(json_config: dict[str, Any]) -> RegistrationConfig:
     """
     Build registration feature configuration from JSON and environment variables.
@@ -1535,6 +1707,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     navidrome_config = _build_navidrome_config(json_config)
     organizr_config = _build_organizr_config(json_config)
     romm_config = _build_romm_config(json_config)
+    radarr_config = _build_radarr_config(json_config)
+    sonarr_config = _build_sonarr_config(json_config)
     registration_config = _build_registration_config(json_config)
     admin_ui_config = _build_admin_ui_config(json_config)
     additional_links = _build_additional_links_config(json_config)
@@ -1548,6 +1722,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         navidrome=navidrome_config,
         organizr=organizr_config,
         romm=romm_config,
+        radarr=radarr_config,
+        sonarr=sonarr_config,
         registration=registration_config,
         admin_ui=admin_ui_config,
         additional_links=additional_links,
